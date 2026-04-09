@@ -111,6 +111,13 @@ class ApiFlowTests(APITestCase):
         )
         self.assertEqual(vis.status_code, status.HTTP_201_CREATED)
 
+        detail = self.client.get(reverse("api-attempt-detail", kwargs={"pk": aid}))
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertIn("session_events", detail.data)
+        self.assertEqual(len(detail.data["session_events"]), 2)
+        types = {e["event_type"] for e in detail.data["session_events"]}
+        self.assertEqual(types, {"page_hidden", "page_visible"})
+
         self.client.post(reverse("api-attempt-complete", kwargs={"pk": aid}))
         closed = self.client.post(
             reverse("api-attempt-session-event", kwargs={"pk": aid}),

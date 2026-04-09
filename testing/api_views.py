@@ -1,4 +1,4 @@
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
@@ -8,7 +8,14 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .models import AnswerOption, AttemptStatus, Question, Test, TestAttempt
+from .models import (
+    AnswerOption,
+    AttemptSessionEvent,
+    AttemptStatus,
+    Question,
+    Test,
+    TestAttempt,
+)
 from .permissions import (
     IsAttemptOwnerOrStaff,
     IsStaffOrReadAccessibleTest,
@@ -35,6 +42,19 @@ from .services import (
     sync_expired_attempt,
     user_can_access_test,
 )
+
+
+def _attempt_queryset_for_serializer():
+    """Попытка с ответами, тестом и журналом visibility/focus для AttemptSerializer."""
+    return TestAttempt.objects.select_related("user", "test").prefetch_related(
+        Prefetch(
+            "session_events",
+            queryset=AttemptSessionEvent.objects.order_by("created_at"),
+        ),
+        "responses__question",
+        "responses__selected_option",
+        "test__questions__options",
+    )
 
 
 def _test_queryset_staff_annotated():
@@ -198,10 +218,9 @@ class StartAttemptView(APIView):
                 sync_expired_attempt(existing_any)
                 existing_any.refresh_from_db()
                 if existing_any.status == AttemptStatus.IN_PROGRESS:
+                    att = _attempt_queryset_for_serializer().get(pk=existing_any.pk)
                     return Response(
-                        AttemptSerializer(
-                            existing_any, context={"request": request}
-                        ).data,
+                        AttemptSerializer(att, context={"request": request}).data,
                         status=status.HTTP_200_OK,
                     )
             return Response(
@@ -224,14 +243,16 @@ class StartAttemptView(APIView):
             status=AttemptStatus.IN_PROGRESS,
         ).first()
         if existing and not existing.is_expired():
+            att = _attempt_queryset_for_serializer().get(pk=existing.pk)
             return Response(
-                AttemptSerializer(existing, context={"request": request}).data,
+                AttemptSerializer(att, context={"request": request}).data,
                 status=status.HTTP_200_OK,
             )
 
         attempt = start_attempt(request.user, test)
+        att = _attempt_queryset_for_serializer().get(pk=attempt.pk)
         return Response(
-            AttemptSerializer(attempt, context={"request": request}).data,
+            AttemptSerializer(att, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -261,11 +282,7 @@ class AttemptDetailView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated, IsAttemptOwnerOrStaff]
 
     def get_queryset(self):
-        return TestAttempt.objects.select_related("user", "test").prefetch_related(
-            "responses__question",
-            "responses__selected_option",
-            "test__questions__options",
-        )
+        return _attempt_queryset_for_serializer()
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -278,7 +295,7 @@ class AttemptDetailView(generics.RetrieveAPIView):
 
 class SubmitAnswerView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated, IsAttemptOwnerOrStaff]
-    queryset = TestAttempt.objects.select_related("test")
+    queryset = _attempt_queryset_for_serializer()
     lookup_url_kwarg = "pk"
 
     def post(self, request, *args, **kwargs):
@@ -302,7 +319,7 @@ class SubmitAnswerView(generics.GenericAPIView):
 
 class CompleteAttemptView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated, IsAttemptOwnerOrStaff]
-    queryset = TestAttempt.objects.all()
+    queryset = _attempt_queryset_for_serializer()
     lookup_url_kwarg = "pk"
 
     def post(self, request, *args, **kwargs):
@@ -314,7 +331,7 @@ class CompleteAttemptView(generics.GenericAPIView):
 
 class AbandonAttemptView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated, IsAttemptOwnerOrStaff]
-    queryset = TestAttempt.objects.all()
+    queryset = _attempt_queryset_for_serializer()
     lookup_url_kwarg = "pk"
 
     def post(self, request, *args, **kwargs):
@@ -328,7 +345,7 @@ class AttemptSessionEventCreateView(generics.GenericAPIView):
     """Логирование visibility/blur с клиента во время активной попытки."""
 
     permission_classes = [IsAuthenticated, IsAttemptOwnerOrStaff]
-    queryset = TestAttempt.objects.all()
+    queryset = _attempt_queryset_for_serializer()
     lookup_url_kwarg = "pk"
 
     def post(self, request, *args, **kwargs):

@@ -1,0 +1,318 @@
+# Uzbek translations for test-backend admin & models.
+# Copyright (C) test-backend
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: test-backend\n"
+"Language: uz\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "Админка тестирования"
+msgstr "Testlash boshqaruv paneli"
+
+msgid "Тесты"
+msgstr "Testlar"
+
+msgid "Название"
+msgstr "Nomi"
+
+msgid "Описание"
+msgstr "Tavsif"
+
+msgid "Начало проведения"
+msgstr "O‘tkazish boshlanishi"
+
+msgid ""
+"Пусто — без ограничения с начала. До этой даты тест для сдающих недоступен."
+msgstr ""
+"Bo‘sh — boshlanish cheklovi yo‘q. Ushbu sanadan oldin test topshiruvchilar uchun "
+"mavjud emas."
+
+msgid "Окончание проведения"
+msgstr "O‘tkazish tugashi"
+
+msgid ""
+"Пусто — без ограничения по окончанию. После этой даты тест недоступен; при "
+"сохранении флаг «Активен» снимается."
+msgstr ""
+"Bo‘sh — tugash cheklovi yo‘q. Ushbu sanadan keyin test mavjud emas; saqlashda "
+"«Faol» yechiladi."
+
+msgid "Лимит времени (сек)"
+msgstr "Vaqt cheklovi (sek)"
+
+msgid ""
+"Пусто — без ограничения. При истечении сохраняются уже данные ответы."
+msgstr ""
+"Bo‘sh — cheklov yo‘q. Vaqt tugaganda allaqachon yuborilgan javoblar saqlanadi."
+
+msgid "Активен"
+msgstr "Faol"
+
+msgid "Отделы с доступом"
+msgstr "Kirish huquqi bo‘lgan bo‘limlar"
+
+msgid ""
+"Стандартные группы Django = отделы. Пусто — тест доступен любому "
+"авторизованному пользователю."
+msgstr ""
+"Django standart guruhlari = bo‘limlar. Bo‘sh — test har qanday tizimga kirgan "
+"foydalanuvchiga ochiq."
+
+msgid "Создан"
+msgstr "Yaratilgan"
+
+msgid "Обновлён"
+msgstr "Yangilangan"
+
+msgid "Тест"
+msgstr "Test"
+
+msgid "Дата окончания должна быть позже даты начала проведения."
+msgstr "Tugash sanasi o‘tkazish boshlanishidan keyin bo‘lishi kerak."
+
+msgid "Текст вопроса"
+msgstr "Savol matni"
+
+msgid "Порядок"
+msgstr "Tartib"
+
+msgid "Баллы за вопрос"
+msgstr "Savol uchun ball"
+
+msgid "Вопрос"
+msgstr "Savol"
+
+msgid "Вопросы"
+msgstr "Savollar"
+
+msgid "Текст варианта"
+msgstr "Variant matni"
+
+msgid "Верный ответ"
+msgstr "To‘g‘ri javob"
+
+msgid "Вариант ответа"
+msgstr "Javob varianti"
+
+msgid "Варианты ответов"
+msgstr "Javob variantlari"
+
+msgid "В процессе"
+msgstr "Jarayonda"
+
+msgid "Завершён"
+msgstr "Yakunlangan"
+
+msgid "Истекло время"
+msgstr "Vaqt tugadi"
+
+msgid "Прерван"
+msgstr "To‘xtatilgan"
+
+msgid "Пользователь"
+msgstr "Foydalanuvchi"
+
+msgid "Статус"
+msgstr "Holat"
+
+msgid "Начало"
+msgstr "Boshlanishi"
+
+msgid "Окончание"
+msgstr "Tugashi"
+
+msgid "Дедлайн"
+msgstr "Muddat"
+
+msgid "Рассчитывается при старте, если у теста задан лимит времени."
+msgstr "Testda vaqt cheklovi bo‘lsa, boshlanganda hisoblanadi."
+
+msgid "Набрано баллов"
+msgstr "Yig‘ilgan ball"
+
+msgid "Максимум баллов (на момент расчёта)"
+msgstr "Maksimal ball (hisob vaqtida)"
+
+msgid "Порядок вопросов (id)"
+msgstr "Savollar tartibi (id)"
+
+msgid ""
+"Случайная перестановка при старте попытки; для next_question и согласованного "
+"порядка."
+msgstr ""
+"Urinish boshlanganda tasodifiy tartib; keyingi savol va bir xil tartib uchun."
+
+msgid "Попытка"
+msgstr "Urinish"
+
+msgid "Попытки"
+msgstr "Urinishlar"
+
+msgid "Выбранный вариант"
+msgstr "Tanlangan variant"
+
+msgid "Верно"
+msgstr "To‘g‘ri"
+
+msgid "Отвечено"
+msgstr "Javob berilgan"
+
+msgid "Ответ в попытке"
+msgstr "Urinishdagi javob"
+
+msgid "Ответы в попытке"
+msgstr "Urinishdagi javoblar"
+
+msgid "Вкладка скрыта (visibility)"
+msgstr "Varaq yashirilgan (visibility)"
+
+msgid "Вкладка снова видна"
+msgstr "Varaq yana ko‘rinadi"
+
+msgid "Окно потеряло фокус"
+msgstr "Oyna fokusni yo‘qotdi"
+
+msgid "Окно получило фокус"
+msgstr "Oyna fokus oldi"
+
+msgid "Тип события"
+msgstr "Hodisa turi"
+
+msgid "Записано на сервере"
+msgstr "Serverda yozilgan"
+
+msgid "Время на клиенте"
+msgstr "Mijoz vaqti"
+
+msgid "ISO-время с браузера, если передано."
+msgstr "Brauzerdan ISO-vaqt, agar yuborilgan bo‘lsa."
+
+msgid "Длительность «вне вкладки», мс"
+msgstr "Varaqdan tashqarida, ms"
+
+msgid "Обычно при page_visible: сколько мс вкладка была скрыта."
+msgstr "Odatda page_visible: varaq qancha ms yashirin bo‘lgani."
+
+msgid "Счётчик уходов (с клиента)"
+msgstr "Chiqishlar soni (mijozdan)"
+
+msgid "Накопительный номер ухода, если фронт ведёт счётчик."
+msgstr "Front hisoblagich yuritsa, chiqish raqami."
+
+msgid "Доп. данные"
+msgstr "Qo‘shimcha ma’lumot"
+
+msgid "IP"
+msgstr "IP"
+
+msgid "User-Agent"
+msgstr "User-Agent"
+
+msgid "Событие сессии попытки"
+msgstr "Urinish sessiyasi hodisasi"
+
+msgid "События сессий попыток"
+msgstr "Urinish sessiyalari hodisalari"
+
+msgid "Создание"
+msgstr "Yaratish"
+
+msgid "Изменение"
+msgstr "O‘zgartirish"
+
+msgid "Удаление"
+msgstr "O‘chirish"
+
+msgid "Кто выполнил"
+msgstr "Kim bajargan"
+
+msgid "Тип действия"
+msgstr "Harakat turi"
+
+msgid "Модель"
+msgstr "Model"
+
+msgid "ID объекта"
+msgstr "Obekt ID"
+
+msgid "Объект"
+msgstr "Obekt"
+
+msgid "Изменённые поля"
+msgstr "O‘zgartirilgan maydonlar"
+
+msgid "IP-адрес"
+msgstr "IP-manzil"
+
+msgid "Время"
+msgstr "Vaqt"
+
+msgid "Лог действий админа"
+msgstr "Admin harakatlari jurnali"
+
+msgid "Логи действий админа"
+msgstr "Admin harakatlari jurnallari"
+
+msgid "Нужно выбрать хотя бы один отдел."
+msgstr "Kamida bitta bo‘limni tanlang."
+
+msgid ""
+"Для каждого вопроса нужно отметить минимум один верный вариант ответа."
+msgstr ""
+"Har bir savol uchun kamida bitta to‘g‘ri javob variantini belgilang."
+
+msgid "Период проведения"
+msgstr "O‘tkazish davri"
+
+msgid ""
+"Вне этого интервала тест для сдающих недоступен. После окончания при сохранении "
+"снимается «Активен»."
+msgstr ""
+"Ushbu oralig‘dan tashqari test topshiruvchilar uchun mavjud emas. Tugagach "
+"saqlashda «Faol» yechiladi."
+
+msgid "Параметры"
+msgstr "Parametrlar"
+
+msgid "Служебное"
+msgstr "Texnik"
+
+msgid "без срока"
+msgstr "muddat yo‘q"
+
+msgid "—"
+msgstr "—"
+
+msgid "{n} с"
+msgstr "{n} s"
+
+msgid "{m} мин {s} с"
+msgstr "{m} daq {s} s"
+
+msgid "Длительность"
+msgstr "Davomiyligi"
+
+msgid "Баллы"
+msgstr "Ballar"
+
+msgid "Отвечено вопросов"
+msgstr "Javob berilgan savollar"
+
+msgid "Вкладка скрыта"
+msgstr "Varaq yashirilgan"
+
+msgid "Зафиксировано событий «Вкладка скрыта» (visibility)"
+msgstr "«Varaq yashirilgan» hodisalari qayd etilgan (visibility)"
+
+msgid "Окно без фокуса"
+msgstr "Fokussiz oyna"
+
+msgid "Зафиксировано событий «Окно потеряло фокус»"
+msgstr "«Oyna fokusni yo‘qotdi» hodisalari qayd etilgan"
+
+msgid "Обновить статус по истечении времени (таймаут)"
+msgstr "Vaqt tugaganda holatni yangilash (taymaut)"

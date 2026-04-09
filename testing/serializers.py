@@ -196,6 +196,22 @@ class AttemptResponseSerializer(serializers.ModelSerializer):
         return obj.is_correct
 
 
+class AttemptSessionEventReadSerializer(serializers.ModelSerializer):
+    """События visibility/focus в ответе по попытке."""
+
+    class Meta:
+        model = AttemptSessionEvent
+        fields = (
+            "id",
+            "event_type",
+            "created_at",
+            "client_timestamp",
+            "duration_away_ms",
+            "leave_count",
+            "meta",
+        )
+
+
 class AttemptSerializer(serializers.ModelSerializer):
     test_id = serializers.IntegerField(source="test.id", read_only=True)
     test_title = serializers.CharField(source="test.title", read_only=True)
@@ -207,6 +223,7 @@ class AttemptSerializer(serializers.ModelSerializer):
     questions_answered = serializers.SerializerMethodField()
     answered_question_ids = serializers.SerializerMethodField()
     next_question = serializers.SerializerMethodField()
+    session_events = serializers.SerializerMethodField()
 
     class Meta:
         model = TestAttempt
@@ -228,6 +245,7 @@ class AttemptSerializer(serializers.ModelSerializer):
             "questions_answered",
             "answered_question_ids",
             "next_question",
+            "session_events",
         )
 
     def get_duration_seconds(self, obj):
@@ -257,6 +275,15 @@ class AttemptSerializer(serializers.ModelSerializer):
             many=True,
             context={**self.context, "attempt": obj},
         ).data
+
+    def get_session_events(self, obj):
+        cache = getattr(obj, "_prefetched_objects_cache", None)
+        if cache and "session_events" in cache:
+            events = list(cache["session_events"])
+            events.sort(key=lambda e: e.created_at)
+        else:
+            events = list(obj.session_events.order_by("created_at"))
+        return AttemptSessionEventReadSerializer(events, many=True).data
 
     def _answered_map(self, obj):
         return {
