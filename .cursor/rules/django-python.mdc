@@ -1,0 +1,28 @@
+---
+description: Соглашения Django/Python для backend и admin
+globs: **/*.py
+alwaysApply: false
+---
+
+# Django и Python
+
+## Стек и стиль
+
+- Django LTS или актуальная стабильная ветка; зависимости в `requirements.txt` или `pyproject.toml`.
+- Один app для домена тестирования (например `testing`) или разделение `accounts` / `tests` — не смешивай бизнес-логику с `settings.py`.
+
+## Модели
+
+- `Meta`: `verbose_name`, `verbose_name_plural` для админки.
+- Внешние ключи с `on_delete` осознанно; для истории результатов — `PROTECT` на тест, если нельзя удалять с попытками.
+- Индексы на поля фильтрации: дата попытки, `user_id`, `test_id`.
+
+## Admin
+
+- Регистрация через `@admin.register` или `admin.site.register`.
+- Для результатов: `readonly_fields` для `duration`, `score` если считаются в `save()`.
+- `ModelAdmin.get_queryset` с `select_related` / `prefetch_related` для тяжёлых списков.
+
+## Безопасность
+
+- Админка только для staff; не храни секреты в репозитории; `DEBUG=False` в проде.
