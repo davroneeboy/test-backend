@@ -1,10 +1,11 @@
 from datetime import timedelta
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, Permission, User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
+from .constants import TEST_CURATOR_GROUP
 from .models import AnswerOption, AttemptStatus, Question, Test, TestAttempt
 from .services import (
     AttemptError,
@@ -113,3 +114,26 @@ class AttemptFlowTests(TestCase):
         complete_attempt(attempt)
         with self.assertRaises(AttemptError):
             start_attempt(self.user, self.test)
+
+
+class TestCuratorGroupTests(TestCase):
+    def test_group_and_permissions(self):
+        self.assertTrue(
+            Permission.objects.filter(codename="change_test").exists(),
+            "Права testing должны существовать после миграций",
+        )
+        g = Group.objects.get(name=TEST_CURATOR_GROUP)
+        codes = set(g.permissions.values_list("codename", flat=True))
+        self.assertGreater(
+            len(codes),
+            0,
+            f"У группы куратора должны быть права, сейчас: {codes!r}",
+        )
+        self.assertIn("change_test", codes)
+        self.assertIn("view_testattempt", codes)
+        self.assertNotIn("change_testattempt", codes)
+        self.assertNotIn("view_adminactionlog", codes)
+        self.assertNotIn("change_attemptresponse", codes)
+        self.assertIn("add_user", codes)
+        self.assertNotIn("delete_user", codes)
+        self.assertIn("change_group", codes)

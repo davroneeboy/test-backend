@@ -9,6 +9,7 @@ from django.forms.models import BaseInlineFormSet
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
+from .constants import TEST_CURATOR_GROUP
 from .models import (
     AdminActionLog,
     AdminActionType,
@@ -24,6 +25,15 @@ from .services import sync_expired_attempt
 
 User = get_user_model()
 AUDIT_LOG_VIEWERS_GROUP = "Просмотр логов админов"
+
+
+def _is_test_curator(request) -> bool:
+    u = request.user
+    return (
+        u.is_authenticated
+        and not u.is_superuser
+        and u.groups.filter(name=TEST_CURATOR_GROUP).exists()
+    )
 
 
 def _get_client_ip(request):
@@ -94,6 +104,45 @@ class UserAdmin(AdminActionLoggingMixin, BaseUserAdmin):
             },
         ),
     )
+
+    _curator_add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "username",
+                    "password1",
+                    "password2",
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "groups",
+                ),
+            },
+        ),
+    )
+
+    _curator_change_fieldsets = (
+        (None, {"fields": ("username",)}),
+        (_("Пароль"), {"fields": ("password",)}),
+        (_("Личная информация"), {"fields": ("first_name", "last_name", "email")}),
+        (_("Отделы"), {"fields": ("groups",)}),
+    )
+
+    def get_fieldsets(self, request, obj=None):
+        if _is_test_curator(request):
+            if obj is None:
+                return self._curator_add_fieldsets
+            return self._curator_change_fieldsets
+        return super().get_fieldsets(request, obj)
+
+    def save_model(self, request, obj, form, change):
+        # Новые пользователи куратором — только обычные (не staff / не суперпользователь).
+        if _is_test_curator(request) and not change:
+            obj.is_staff = False
+            obj.is_superuser = False
+        super().save_model(request, obj, form, change)
 
 
 if admin.site.is_registered(User):
@@ -274,6 +323,24 @@ class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
     autocomplete_fields = ("user", "test")
     inlines = (AttemptResponseInline, AttemptSessionEventInline)
     actions = ("action_sync_timeout",)
+
+    def get_inline_instances(self, request, obj=None):
+        inlines = super().get_inline_instances(request, obj)
+        if request.user.is_superuser:
+            return inlines
+        if not request.user.has_perm("testing.change_attemptresponse"):
+            inlines = [
+                i
+                for i in inlines
+                if not isinstance(i, AttemptResponseInline)
+            ]
+        if not request.user.has_perm("testing.change_attemptsessionevent"):
+            inlines = [
+                i
+                for i in inlines
+                if not isinstance(i, AttemptSessionEventInline)
+            ]
+        return inlines
 
     @admin.display(description=_("Длительность"))
     def duration_display(self, obj: TestAttempt):
