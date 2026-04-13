@@ -1,3 +1,7 @@
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
+
 import nested_admin
 from django.contrib import admin
 from django.db.models import Count, Q
@@ -6,6 +10,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.core.exceptions import ValidationError
 from django.forms.models import BaseInlineFormSet
+from django.http import HttpResponse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
@@ -285,6 +290,110 @@ class AttemptSessionEventInline(admin.TabularInline):
         return False
 
 
+def _fmt_duration(seconds):
+    """Конвертировать секунды в строку М:СС или Ч:ММ:СС."""
+    if seconds is None:
+        return "—"
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
+
+
+@admin.action(description=_("Экспорт выбранных попыток в Excel"))
+def export_attempts_xlsx(modeladmin, request, queryset):
+    qs = (
+        queryset
+        .select_related("user", "test")
+        .prefetch_related("user__groups")
+        .annotate(
+            _tab_hidden=Count(
+                "session_events",
+                filter=Q(session_events__event_type=AttemptSessionEventType.PAGE_HIDDEN),
+            ),
+            _window_blur=Count(
+                "session_events",
+                filter=Q(session_events__event_type=AttemptSessionEventType.WINDOW_BLUR),
+            ),
+            _answered=Count("responses"),
+        )
+    )
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Попытки"
+
+    headers = [
+        "ID",
+        "ФИО",
+        "Логин",
+        "Отдел",
+        "Тест",
+        "Статус",
+        "Начало",
+        "Конец",
+        "Длительность",
+        "Набрано",
+        "Максимум",
+        "Результат (%)",
+        "Отвечено вопросов",
+        "Уходы со вкладки",
+        "Уходы из окна",
+    ]
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(fill_type="solid", fgColor="2563EB")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    for col_idx, title in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=title)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+
+    ws.freeze_panes = "A2"
+    ws.row_dimensions[1].height = 32
+
+    fmt_dt = "%d.%m.%Y %H:%M"
+
+    for obj in qs:
+        department = obj.user.groups.first()
+        pct = (
+            round(float(obj.score_earned / obj.score_max * 100), 1)
+            if obj.score_max
+            else "—"
+        )
+        ws.append([
+            obj.pk,
+            obj.user.get_full_name() or obj.user.username,
+            obj.user.username,
+            department.name if department else "—",
+            str(obj.test),
+            obj.get_status_display(),
+            obj.started_at.strftime(fmt_dt) if obj.started_at else "—",
+            obj.finished_at.strftime(fmt_dt) if obj.finished_at else "—",
+            _fmt_duration(obj.duration_seconds),
+            float(obj.score_earned),
+            float(obj.score_max),
+            pct,
+            obj._answered,
+            obj._tab_hidden,
+            obj._window_blur,
+        ])
+
+    col_widths = [6, 28, 18, 20, 32, 16, 18, 18, 14, 10, 10, 14, 18, 16, 16]
+    for col_idx, width in enumerate(col_widths, start=1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="attempts.xlsx"'
+    wb.save(response)
+    return response
+
+
 @admin.register(TestAttempt)
 class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
     list_display = (
@@ -322,7 +431,7 @@ class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
     )
     autocomplete_fields = ("user", "test")
     inlines = (AttemptResponseInline, AttemptSessionEventInline)
-    actions = ("action_sync_timeout",)
+    actions = ("action_sync_timeout", export_attempts_xlsx)
 
     def get_inline_instances(self, request, obj=None):
         inlines = super().get_inline_instances(request, obj)

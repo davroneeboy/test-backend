@@ -162,11 +162,14 @@ class TestDetailSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         questions = data.get("questions")
         if questions:
-            random.shuffle(questions)
+            request = self.context.get("request")
+            user_pk = request.user.pk if request and request.user.is_authenticated else 0
+            rng = random.Random(user_pk * 10 ** 6 + instance.pk)
+            rng.shuffle(questions)
             for q in questions:
                 opts = q.get("options")
                 if opts:
-                    random.shuffle(opts)
+                    rng.shuffle(opts)
         return data
 
 
@@ -267,11 +270,9 @@ class AttemptSerializer(serializers.ModelSerializer):
         return timezone.now()
 
     def get_responses(self, obj):
-        qs = obj.responses.select_related("question", "selected_option").order_by(
-            "answered_at"
-        )
+        responses = sorted(obj.responses.all(), key=lambda r: r.answered_at)
         return AttemptResponseSerializer(
-            qs,
+            responses,
             many=True,
             context={**self.context, "attempt": obj},
         ).data
@@ -288,14 +289,14 @@ class AttemptSerializer(serializers.ModelSerializer):
     def _answered_map(self, obj):
         return {
             r.question_id: r.selected_option_id
-            for r in obj.responses.only("question_id", "selected_option_id")
+            for r in obj.responses.all()
         }
 
     def get_questions_total(self, obj):
-        return obj.test.questions.count()
+        return len(obj.test.questions.all())
 
     def get_questions_answered(self, obj):
-        return obj.responses.count()
+        return len(obj.responses.all())
 
     def get_answered_question_ids(self, obj):
         return sorted(self._answered_map(obj).keys())

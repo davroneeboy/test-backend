@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find . -name \"*.py\" -type f ! -path \"./.*\" ! -path \"./.venv/*\" ! -path \"./testing/migrations/*\" -exec wc -l {} +)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(.venv/Scripts/pip show:*)"
+    ]
+  }
+}

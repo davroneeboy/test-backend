@@ -4,6 +4,8 @@ djangorestframework>=3.15,<4
 djangorestframework-simplejwt>=5.4,<6
 django-cors-headers>=4.3,<5
 django-nested-admin>=4.0,<5
+openpyxl>=3.1,<4
+python-dotenv>=1.0,<2
 # Setuptools 81+ помечает pkg_resources устаревшим; линия ниже гасит лишние предупреждения,
 # если какая-то зависимость всё ещё тянет pkg_resources.
 setuptools>=69,<81

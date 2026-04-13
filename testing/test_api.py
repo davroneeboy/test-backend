@@ -66,9 +66,9 @@ class ApiFlowTests(APITestCase):
         self._login("student", "pass12345")
         r = self.client.get(reverse("api-test-list"))
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(r.data), 1)
+        self.assertEqual(r.data["count"], 1)
 
-        rid = r.data[0]["id"]
+        rid = r.data["results"][0]["id"]
         d = self.client.get(reverse("api-test-detail", kwargs={"pk": rid}))
         self.assertEqual(d.status_code, status.HTTP_200_OK)
         opt = d.data["questions"][0]["options"][0]
@@ -181,7 +181,7 @@ class ApiFlowTests(APITestCase):
         self._login("admin", "pass12345")
         r = self.client.get(reverse("api-attempt-list"))
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        self.assertGreaterEqual(len(r.data), 1)
+        self.assertGreaterEqual(r.data["count"], 1)
 
     def test_staff_create_test_includes_correct_flags(self):
         self._login("admin", "pass12345")

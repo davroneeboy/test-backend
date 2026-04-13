@@ -14,20 +14,29 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Загружаем .env из корня проекта (не перезаписывает уже выставленные env-переменные).
+load_dotenv(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-vqpwj@3mjuqevt+p4(7@(i2m3y*=wafrc+k0&@btjp!n^3o(!9'
+# В продакшене задать через env: SECRET_KEY=<случайная строка>
+SECRET_KEY = os.environ["SECRET_KEY"]
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# В продакшене задать через env: DEBUG=False
+DEBUG = os.environ.get("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS: list[str] = ["localhost", "127.0.0.1"]
+# В продакшене задать через env: ALLOWED_HOSTS=example.com,www.example.com
+_allowed_hosts = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1")
+ALLOWED_HOSTS: list[str] = [h.strip() for h in _allowed_hosts.split(",") if h.strip()]
 
 # CORS: для фронта на другом origin задайте CORS_ALLOWED_ORIGINS в env (через запятую).
 _cors = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
@@ -47,6 +56,12 @@ REST_FRAMEWORK = {
         "rest_framework.renderers.JSONRenderer",
     ),
     "EXCEPTION_HANDLER": "testing.api_exceptions.custom_exception_handler",
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
+    "DEFAULT_THROTTLE_RATES": {
+        # В продакшене ограничить: LOGIN_THROTTLE_RATE=5/min
+        "login": os.environ.get("LOGIN_THROTTLE_RATE", "30/min"),
+    },
 }
 
 SIMPLE_JWT = {
@@ -164,3 +179,46 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "WARNING",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": os.environ.get("DJANGO_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "django.security": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "testing": {
+            "handlers": ["console"],
+            "level": "DEBUG" if DEBUG else "INFO",
+            "propagate": False,
+        },
+    },
+}

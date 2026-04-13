@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -77,6 +78,23 @@ def _filter_tests_by_conduct_schedule(qs):
     )
 
 
+def _accessible_tests_qs(base, user):
+    """Queryset тестов, доступных не-staff пользователю по отделу и расписанию."""
+    user_groups = user.groups.values_list("pk", flat=True)
+    return (
+        _filter_tests_by_conduct_schedule(
+            base.filter(is_active=True)
+            .annotate(_agc=Count("allowed_groups", distinct=True))
+            .filter(Q(_agc=0) | Q(allowed_groups__in=user_groups))
+            .distinct()
+        ).order_by("?")
+    )
+
+
+class LoginRateThrottle(AnonRateThrottle):
+    scope = "login"
+
+
 class LoginSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
@@ -86,6 +104,7 @@ class LoginSerializer(TokenObtainPairSerializer):
 
 class LoginView(TokenObtainPairView):
     serializer_class = LoginSerializer
+    throttle_classes = [LoginRateThrottle]
 
 
 class MeView(generics.RetrieveUpdateAPIView):
@@ -131,15 +150,7 @@ class TestListView(generics.ListCreateAPIView):
         user = self.request.user
         if user.is_staff:
             return base.order_by("?")
-        user_groups = user.groups.values_list("pk", flat=True)
-        return (
-            _filter_tests_by_conduct_schedule(
-                base.filter(is_active=True)
-                .annotate(_agc=Count("allowed_groups", distinct=True))
-                .filter(Q(_agc=0) | Q(allowed_groups__in=user_groups))
-                .distinct()
-            ).order_by("?")
-        )
+        return _accessible_tests_qs(base, user)
 
     def create(self, request, *args, **kwargs):
         serializer = TestWriteSerializer(
@@ -168,15 +179,7 @@ class TestDetailView(generics.RetrieveUpdateDestroyAPIView):
         user = self.request.user
         if user.is_staff:
             return base.order_by("?")
-        user_groups = user.groups.values_list("pk", flat=True)
-        return (
-            _filter_tests_by_conduct_schedule(
-                base.filter(is_active=True)
-                .annotate(_agc=Count("allowed_groups", distinct=True))
-                .filter(Q(_agc=0) | Q(allowed_groups__in=user_groups))
-                .distinct()
-            ).order_by("?")
-        )
+        return _accessible_tests_qs(base, user)
 
     def update(self, request, *args, **kwargs):
         partial = request.method == "PATCH"
@@ -228,25 +231,6 @@ class StartAttemptView(APIView):
                     "detail": "Этот тест можно пройти только один раз. Повторное прохождение недоступно."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        for att in TestAttempt.objects.filter(
-            user=request.user,
-            test=test,
-            status=AttemptStatus.IN_PROGRESS,
-        ):
-            sync_expired_attempt(att)
-
-        existing = TestAttempt.objects.filter(
-            user=request.user,
-            test=test,
-            status=AttemptStatus.IN_PROGRESS,
-        ).first()
-        if existing and not existing.is_expired():
-            att = _attempt_queryset_for_serializer().get(pk=existing.pk)
-            return Response(
-                AttemptSerializer(att, context={"request": request}).data,
-                status=status.HTTP_200_OK,
             )
 
         attempt = start_attempt(request.user, test)
