@@ -83,6 +83,8 @@ class ApiFlowTests(APITestCase):
         )
         self.assertEqual(r.status_code, status.HTTP_201_CREATED)
         aid = r.data["id"]
+
+        # page_hidden — сохраняется и немедленно терминирует попытку
         ev = self.client.post(
             reverse("api-attempt-session-event", kwargs={"pk": aid}),
             {
@@ -95,30 +97,29 @@ class ApiFlowTests(APITestCase):
         )
         self.assertEqual(ev.status_code, status.HTTP_201_CREATED)
         self.assertEqual(ev.data["event_type"], "page_hidden")
+        self.assertTrue(ev.data["attempt_terminated"])
         row = AttemptSessionEvent.objects.get(pk=ev.data["id"])
         self.assertEqual(row.attempt_id, aid)
         self.assertEqual(row.user_id, self.user.pk)
         self.assertEqual(row.leave_count, 1)
 
+        # Попытка уже TERMINATED — любые новые события отклоняются
         vis = self.client.post(
             reverse("api-attempt-session-event", kwargs={"pk": aid}),
-            {
-                "event_type": "page_visible",
-                "leave_count": 1,
-                "duration_away_ms": 4200,
-            },
+            {"event_type": "page_visible", "leave_count": 1, "duration_away_ms": 4200},
             format="json",
         )
-        self.assertEqual(vis.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(vis.status_code, status.HTTP_400_BAD_REQUEST)
 
+        # В истории только одно событие (page_hidden)
         detail = self.client.get(reverse("api-attempt-detail", kwargs={"pk": aid}))
         self.assertEqual(detail.status_code, status.HTTP_200_OK)
         self.assertIn("session_events", detail.data)
-        self.assertEqual(len(detail.data["session_events"]), 2)
-        types = {e["event_type"] for e in detail.data["session_events"]}
-        self.assertEqual(types, {"page_hidden", "page_visible"})
+        self.assertEqual(len(detail.data["session_events"]), 1)
+        self.assertEqual(detail.data["session_events"][0]["event_type"], "page_hidden")
+        self.assertEqual(detail.data["status"], "terminated")
 
-        self.client.post(reverse("api-attempt-complete", kwargs={"pk": aid}))
+        # Повторная проверка: закрытая попытка по-прежнему отклоняет события
         closed = self.client.post(
             reverse("api-attempt-session-event", kwargs={"pk": aid}),
             {"event_type": "page_hidden"},

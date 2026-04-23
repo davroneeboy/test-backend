@@ -9,7 +9,8 @@ from __future__ import annotations
 import random
 
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import DecimalField, OuterRef, Subquery, Sum, Value
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from .models import (
@@ -81,27 +82,71 @@ def _ensure_in_progress(attempt: TestAttempt) -> None:
         raise AttemptError("Время вышло; сохранены ответы, отправленные до дедлайна.")
 
 
+# Тип поля для score_earned / score_max
+_SCORE_FIELD = DecimalField(max_digits=10, decimal_places=2)
+
+
+def _earned_subquery() -> Coalesce:
+    """Сумма баллов за правильные ответы — коррелированный подзапрос."""
+    return Coalesce(
+        Subquery(
+            AttemptResponse.objects
+            .filter(attempt_id=OuterRef("pk"), is_correct=True)
+            .values("attempt_id")
+            .annotate(s=Sum("question__points"))
+            .values("s")[:1],
+            output_field=_SCORE_FIELD,
+        ),
+        Value(0, output_field=_SCORE_FIELD),
+    )
+
+
+def _max_subquery() -> Coalesce:
+    """Максимальный балл за тест — коррелированный подзапрос."""
+    return Coalesce(
+        Subquery(
+            Question.objects
+            .filter(test_id=OuterRef("test_id"))
+            .values("test_id")
+            .annotate(s=Sum("points"))
+            .values("s")[:1],
+            output_field=_SCORE_FIELD,
+        ),
+        Value(0, output_field=_SCORE_FIELD),
+    )
+
+
+def _save_scores_atomically(
+    attempt: TestAttempt,
+    extra_fields: dict | None = None,
+) -> None:
+    """
+    Пересчитывает score_earned / score_max и сохраняет их одним UPDATE-запросом.
+
+    Устраняет race condition: вместо read-modify-write на стороне Python
+    выполняется одна атомарная операция на уровне БД. Никакой другой транзакции
+    не виден «старый» score между чтением и записью.
+    """
+    updates: dict = {
+        "score_earned": _earned_subquery(),
+        "score_max": _max_subquery(),
+        **(extra_fields or {}),
+    }
+    TestAttempt.objects.filter(pk=attempt.pk).update(**updates)
+    refresh = ["score_earned", "score_max"] + [
+        k for k in (extra_fields or {}) if k not in ("score_earned", "score_max")
+    ]
+    attempt.refresh_from_db(fields=refresh)
+
+
 def _close_timed_out(attempt: TestAttempt, now=None) -> None:
     now = now or timezone.now()
     if attempt.status != AttemptStatus.IN_PROGRESS:
         return
-    attempt.status = AttemptStatus.TIMED_OUT
-    attempt.finished_at = min(now, attempt.deadline_at) if attempt.deadline_at else now
-    _recalc_scores(attempt)
-    attempt.save(update_fields=("status", "finished_at", "score_earned", "score_max"))
-
-
-def _recalc_scores(attempt: TestAttempt) -> None:
-    attempt.score_max = (
-        attempt.test.questions.aggregate(total=Sum("points"))["total"] or 0
-    )
-    earned = (
-        attempt.responses.filter(is_correct=True).aggregate(
-            s=Sum("question__points")
-        )["s"]
-        or 0
-    )
-    attempt.score_earned = earned
+    _save_scores_atomically(attempt, {
+        "status": AttemptStatus.TIMED_OUT,
+        "finished_at": min(now, attempt.deadline_at) if attempt.deadline_at else now,
+    })
 
 
 def submit_answer(
@@ -120,32 +165,22 @@ def submit_answer(
             raise AttemptError("Вопрос не из этого теста.")
         if selected_option.question_id != question.id:
             raise AttemptError("Вариант не относится к вопросу.")
-        is_correct = selected_option.is_correct
         obj, _ = AttemptResponse.objects.update_or_create(
             attempt=attempt,
             question=question,
             defaults={
                 "selected_option": selected_option,
-                "is_correct": is_correct,
+                "is_correct": selected_option.is_correct,
             },
         )
-        _recalc_scores(attempt)
         total_questions = attempt.test.questions.count()
         answered_questions = attempt.responses.count()
-        if total_questions > 0 and answered_questions >= total_questions:
-            # Если пользователь ответил на все вопросы, закрываем попытку автоматически.
-            attempt.status = AttemptStatus.COMPLETED
-            attempt.finished_at = timezone.now()
-            attempt.save(
-                update_fields=(
-                    "score_earned",
-                    "score_max",
-                    "status",
-                    "finished_at",
-                )
-            )
-        else:
-            attempt.save(update_fields=("score_earned", "score_max"))
+        is_complete = total_questions > 0 and answered_questions >= total_questions
+        _save_scores_atomically(
+            attempt,
+            {"status": AttemptStatus.COMPLETED, "finished_at": timezone.now()}
+            if is_complete else None,
+        )
         return obj
 
 
@@ -158,12 +193,10 @@ def complete_attempt(attempt: TestAttempt) -> TestAttempt:
         if attempt.is_expired():
             _close_timed_out(attempt)
             return attempt
-        attempt.status = AttemptStatus.COMPLETED
-        attempt.finished_at = timezone.now()
-        _recalc_scores(attempt)
-        attempt.save(
-            update_fields=("status", "finished_at", "score_earned", "score_max")
-        )
+        _save_scores_atomically(attempt, {
+            "status": AttemptStatus.COMPLETED,
+            "finished_at": timezone.now(),
+        })
         return attempt
 
 
@@ -172,33 +205,29 @@ def abandon_attempt(attempt: TestAttempt) -> TestAttempt:
         attempt = TestAttempt.objects.select_for_update().get(pk=attempt.pk)
         if attempt.status != AttemptStatus.IN_PROGRESS:
             return attempt
-        attempt.status = AttemptStatus.ABANDONED
-        attempt.finished_at = timezone.now()
-        _recalc_scores(attempt)
-        attempt.save(
-            update_fields=("status", "finished_at", "score_earned", "score_max")
-        )
+        _save_scores_atomically(attempt, {
+            "status": AttemptStatus.ABANDONED,
+            "finished_at": timezone.now(),
+        })
         return attempt
 
 
 def terminate_attempt(attempt: TestAttempt, reason: str) -> TestAttempt:
-    """Forcibly close attempt (tab/app switch): score_earned reset to 0."""
+    """Принудительное закрытие (смена вкладки/приложения): score_earned = 0."""
     with transaction.atomic():
         attempt = TestAttempt.objects.select_for_update().get(pk=attempt.pk)
         if attempt.status != AttemptStatus.IN_PROGRESS:
             return attempt
-        attempt.status = AttemptStatus.TERMINATED
-        attempt.finished_at = timezone.now()
-        attempt.termination_reason = reason
-        attempt.score_max = (
-            attempt.test.questions.aggregate(total=Sum("points"))["total"] or 0
+        # Не пересчитываем score_earned — при нарушении он обнуляется.
+        TestAttempt.objects.filter(pk=attempt.pk).update(
+            status=AttemptStatus.TERMINATED,
+            finished_at=timezone.now(),
+            termination_reason=reason,
+            score_earned=Value(0, output_field=_SCORE_FIELD),
+            score_max=_max_subquery(),
         )
-        attempt.score_earned = 0
-        attempt.save(
-            update_fields=(
-                "status", "finished_at", "termination_reason",
-                "score_earned", "score_max",
-            )
+        attempt.refresh_from_db(
+            fields=["status", "finished_at", "termination_reason", "score_earned", "score_max"]
         )
         return attempt
 
