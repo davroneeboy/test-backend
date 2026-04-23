@@ -356,6 +356,11 @@ def export_attempts_xlsx(modeladmin, request, queryset):
     ws = wb.active
     ws.title = "Urinishlar"
 
+    _termination_labels = {
+        "tab_switch": "Boshqa vkladkaga o'tganligi sababli",
+        "window_blur": "Boshqa ilovaga o'tganligi sababli",
+    }
+
     headers = [
         "Hudud turi",
         "Viloyat",
@@ -366,6 +371,7 @@ def export_attempts_xlsx(modeladmin, request, queryset):
         "Jami savollar",
         "Javob berilgan",
         "Natija (%)",
+        "Yakunlanish sababi",
         "Boshlanish",
         "Tugash",
     ]
@@ -395,6 +401,11 @@ def export_attempts_xlsx(modeladmin, request, queryset):
             if obj.score_max
             else "—"
         )
+        termination = (
+            _termination_labels.get(obj.termination_reason, obj.termination_reason)
+            if obj.termination_reason
+            else "—"
+        )
         ws.append([
             region_type,
             viloyat,
@@ -405,11 +416,12 @@ def export_attempts_xlsx(modeladmin, request, queryset):
             obj._total_q,
             obj._answered,
             pct,
+            termination,
             obj.started_at.strftime(fmt_dt) if obj.started_at else "—",
             obj.finished_at.strftime(fmt_dt) if obj.finished_at else "—",
         ])
 
-    col_widths = [18, 24, 28, 18, 20, 32, 14, 14, 12, 18, 18]
+    col_widths = [18, 24, 28, 18, 20, 32, 14, 14, 12, 32, 18, 18]
     for col_idx, width in enumerate(col_widths, start=1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
 
