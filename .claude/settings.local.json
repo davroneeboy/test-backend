@@ -11,7 +11,8 @@
       "Bash(.venv/Scripts/python manage.py findstatic testing/admin_region.js)",
       "Bash(git -C \"C:\\\\Users\\\\aod1\\\\Desktop\\\\test-backend\" status)",
       "Bash(git -C \"C:\\\\Users\\\\aod1\\\\Desktop\\\\test-backend\" diff --stat)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(.venv/Scripts/python manage.py test testing --verbosity=2)"
     ]
   }
 }
