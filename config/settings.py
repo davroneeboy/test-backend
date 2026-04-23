@@ -14,6 +14,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+import sentry_sdk
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -21,6 +22,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Загружаем .env из корня проекта (не перезаписывает уже выставленные env-переменные).
 load_dotenv(BASE_DIR / ".env")
+
+_sentry_dsn = os.environ.get("SENTRY_DSN", "").strip()
+if _sentry_dsn:
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        environment="production" if not os.environ.get("DEBUG", "True") == "True" else "development",
+        traces_sample_rate=0.2,
+        send_default_pii=False,
+    )
 
 
 # Quick-start development settings - unsuitable for production
