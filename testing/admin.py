@@ -425,7 +425,8 @@ def export_attempts_xlsx(modeladmin, request, queryset):
 class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
     list_display = (
         "id",
-        "user",
+        "fio_display",
+        "viloyat_display",
         "test",
         "status",
         "termination_reason_display",
@@ -445,6 +446,8 @@ class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
     )
     search_fields = (
         "user__username",
+        "user__first_name",
+        "user__last_name",
         "user__email",
         "test__title",
     )
@@ -479,6 +482,20 @@ class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
                 if not isinstance(i, AttemptSessionEventInline)
             ]
         return inlines
+
+    @admin.display(description=_("F.I.Sh."), ordering="user__last_name")
+    def fio_display(self, obj: TestAttempt):
+        full = obj.user.get_full_name()
+        return full or obj.user.username
+
+    @admin.display(description=_("Viloyat"))
+    def viloyat_display(self, obj: TestAttempt):
+        profile = getattr(obj.user, "profile", None)
+        if not profile:
+            return "—"
+        if profile.viloyat:
+            return profile.get_viloyat_display()
+        return profile.get_region_type_display()
 
     @admin.display(description=_("Tugatilish sababi"))
     def termination_reason_display(self, obj: TestAttempt):
@@ -559,7 +576,7 @@ class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        qs = qs.select_related("user", "test").prefetch_related(
+        qs = qs.select_related("user", "user__profile", "test").prefetch_related(
             "user__groups",
             "responses",
         )
