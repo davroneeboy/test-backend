@@ -12,6 +12,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import (
     AnswerOption,
     AttemptSessionEvent,
+    AttemptSessionEventType,
     AttemptStatus,
     Question,
     Test,
@@ -41,6 +42,7 @@ from .services import (
     start_attempt,
     submit_answer,
     sync_expired_attempt,
+    terminate_attempt,
     user_can_access_test,
 )
 
@@ -340,7 +342,7 @@ class AttemptSessionEventCreateView(generics.GenericAPIView):
         if attempt.status != AttemptStatus.IN_PROGRESS:
             return Response(
                 {
-                    "detail": "События принимаются только для попытки в статусе «в процессе»."
+                    "detail": "Hodisalar faqat 'jarayonda' holatidagi urinish uchun qabul qilinadi."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -350,11 +352,24 @@ class AttemptSessionEventCreateView(generics.GenericAPIView):
         )
         ser.is_valid(raise_exception=True)
         inst = ser.save()
+
+        _terminate_on = {
+            AttemptSessionEventType.PAGE_HIDDEN: "tab_switch",
+            AttemptSessionEventType.WINDOW_BLUR: "window_blur",
+        }
+        was_terminated = False
+        if inst.event_type in _terminate_on:
+            attempt.refresh_from_db()
+            if attempt.status == AttemptStatus.IN_PROGRESS:
+                terminate_attempt(attempt, _terminate_on[inst.event_type])
+                was_terminated = True
+
         return Response(
             {
                 "id": inst.pk,
                 "event_type": inst.event_type,
                 "created_at": inst.created_at,
+                "attempt_terminated": was_terminated,
             },
             status=status.HTTP_201_CREATED,
         )

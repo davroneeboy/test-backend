@@ -235,6 +235,7 @@ class AttemptSerializer(serializers.ModelSerializer):
             "test_id",
             "test_title",
             "status",
+            "termination_reason",
             "started_at",
             "finished_at",
             "deadline_at",
