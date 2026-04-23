@@ -5,52 +5,52 @@ from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
+from .constants import REGION_MARKAZIY, REGION_VILOYAT, REGION_TYPE_CHOICES, VILOYAT_CHOICES
+
 
 class Test(models.Model):
-    """Тест: набор вопросов; лимит времени опционален."""
-
-    title = models.CharField(_("Название"), max_length=255)
-    description = models.TextField(_("Описание"), blank=True)
+    title = models.CharField(_("Nomi"), max_length=255)
+    description = models.TextField(_("Tavsifi"), blank=True)
     conduct_starts_at = models.DateTimeField(
-        _("Начало проведения"),
+        _("O'tkazish boshlanishi"),
         null=True,
         blank=True,
         help_text=_(
-            "Пусто — без ограничения с начала. До этой даты тест для сдающих недоступен."
+            "Bo'sh — boshidan cheklovsiz. Bu sanagacha test topshiruvchilarga mavjud emas."
         ),
     )
     conduct_ends_at = models.DateTimeField(
-        _("Окончание проведения"),
+        _("O'tkazish tugashi"),
         null=True,
         blank=True,
         help_text=_(
-            "Пусто — без ограничения по окончанию. После этой даты тест недоступен; при сохранении флаг «Активен» снимается."
+            "Bo'sh — tugashida cheklovsiz. Bu sanadan keyin test mavjud emas; saqlashda «Faol» belgisi olib tashlanadi."
         ),
     )
     time_limit_seconds = models.PositiveIntegerField(
-        _("Лимит времени (сек)"),
+        _("Vaqt chegarasi (sek)"),
         null=True,
         blank=True,
         help_text=_(
-            "Пусто — без ограничения. При истечении сохраняются уже данные ответы."
+            "Bo'sh — cheklovsiz. Vaqt tugaganda mavjud javoblar saqlanadi."
         ),
     )
-    is_active = models.BooleanField(_("Активен"), default=True)
+    is_active = models.BooleanField(_("Faol"), default=True)
     allowed_groups = models.ManyToManyField(
         Group,
         blank=True,
         related_name="allowed_tests",
-        verbose_name=_("Отделы с доступом"),
+        verbose_name=_("Kirish huquqi bo'limlar"),
         help_text=_(
-            "Стандартные группы Django = отделы. Пусто — тест доступен любому авторизованному пользователю."
+            "Django standart guruhlari = bo'limlar. Bo'sh — test har qanday autentifikatsiya qilingan foydalanuvchiga mavjud."
         ),
     )
-    created_at = models.DateTimeField(_("Создан"), auto_now_add=True)
-    updated_at = models.DateTimeField(_("Обновлён"), auto_now=True)
+    created_at = models.DateTimeField(_("Yaratilgan"), auto_now_add=True)
+    updated_at = models.DateTimeField(_("Yangilangan"), auto_now=True)
 
     class Meta:
-        verbose_name = _("Тест")
-        verbose_name_plural = _("Тесты")
+        verbose_name = _("Test")
+        verbose_name_plural = _("Testlar")
         ordering = ("-updated_at",)
 
     def __str__(self) -> str:
@@ -62,7 +62,7 @@ class Test(models.Model):
                 raise ValidationError(
                     {
                         "conduct_ends_at": _(
-                            "Дата окончания должна быть позже даты начала проведения."
+                            "Tugash sanasi boshlanish sanasidan keyin bo'lishi kerak."
                         )
                     }
                 )
@@ -74,7 +74,6 @@ class Test(models.Model):
         super().save(*args, **kwargs)
 
     def is_conduct_period_open(self, now=None) -> bool:
-        """Сейчас внутри окна проведения (пустые границы = без ограничения с этой стороны)."""
         now = now or timezone.now()
         if self.conduct_starts_at is not None and now < self.conduct_starts_at:
             return False
@@ -91,15 +90,15 @@ class Question(models.Model):
         Test,
         on_delete=models.CASCADE,
         related_name="questions",
-        verbose_name=_("Тест"),
+        verbose_name=_("Test"),
     )
-    text = models.TextField(_("Текст вопроса"))
-    order = models.PositiveSmallIntegerField(_("Порядок"), default=0)
-    points = models.PositiveSmallIntegerField(_("Баллы за вопрос"), default=1)
+    text = models.TextField(_("Savol matni"))
+    order = models.PositiveSmallIntegerField(_("Tartib"), default=0)
+    points = models.PositiveSmallIntegerField(_("Savol uchun ball"), default=1)
 
     class Meta:
-        verbose_name = _("Вопрос")
-        verbose_name_plural = _("Вопросы")
+        verbose_name = _("Savol")
+        verbose_name_plural = _("Savollar")
         ordering = ("test", "order", "id")
 
     def __str__(self) -> str:
@@ -111,80 +110,90 @@ class AnswerOption(models.Model):
         Question,
         on_delete=models.CASCADE,
         related_name="options",
-        verbose_name=_("Вопрос"),
+        verbose_name=_("Savol"),
     )
-    text = models.CharField(_("Текст варианта"), max_length=500)
-    is_correct = models.BooleanField(_("Верный ответ"), default=False)
+    text = models.CharField(_("Variant matni"), max_length=500)
+    is_correct = models.BooleanField(_("To'g'ri javob"), default=False)
 
     class Meta:
-        verbose_name = _("Вариант ответа")
-        verbose_name_plural = _("Варианты ответов")
+        verbose_name = _("Javob varianti")
+        verbose_name_plural = _("Javob variantlari")
 
     def __str__(self) -> str:
         return self.text[:60]
 
 
 class AttemptStatus(models.TextChoices):
-    IN_PROGRESS = "in_progress", _("В процессе")
-    COMPLETED = "completed", _("Завершён")
-    TIMED_OUT = "timed_out", _("Истекло время")
-    ABANDONED = "abandoned", _("Прерван")
+    IN_PROGRESS = "in_progress", _("Jarayonda")
+    COMPLETED = "completed", _("Yakunlangan")
+    TIMED_OUT = "timed_out", _("Vaqt tugadi")
+    ABANDONED = "abandoned", _("To'xtatilgan")
+    TERMINATED = "terminated", _("Majburan tugatildi")
+
+
+class TerminationReason(models.TextChoices):
+    TAB_SWITCH = "tab_switch", _("Boshqa vkladkaga o'tildi")
+    WINDOW_BLUR = "window_blur", _("Boshqa ilovaga o'tildi")
 
 
 class TestAttempt(models.Model):
-    """Одна попытка прохождения: время, статус, итоговые баллы (в т.ч. частичный результат)."""
-
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="test_attempts",
-        verbose_name=_("Пользователь"),
+        verbose_name=_("Foydalanuvchi"),
     )
     test = models.ForeignKey(
         Test,
         on_delete=models.PROTECT,
         related_name="attempts",
-        verbose_name=_("Тест"),
+        verbose_name=_("Test"),
     )
     status = models.CharField(
-        _("Статус"),
+        _("Holat"),
         max_length=20,
         choices=AttemptStatus.choices,
         default=AttemptStatus.IN_PROGRESS,
         db_index=True,
     )
-    started_at = models.DateTimeField(_("Начало"), auto_now_add=True)
-    finished_at = models.DateTimeField(_("Окончание"), null=True, blank=True)
+    started_at = models.DateTimeField(_("Boshlanish"), auto_now_add=True)
+    finished_at = models.DateTimeField(_("Tugash"), null=True, blank=True)
     deadline_at = models.DateTimeField(
-        _("Дедлайн"),
+        _("Muddat"),
         null=True,
         blank=True,
-        help_text=_("Рассчитывается при старте, если у теста задан лимит времени."),
+        help_text=_("Testda vaqt chegarasi belgilangan bo'lsa, startda hisoblanadi."),
     )
     score_earned = models.DecimalField(
-        _("Набрано баллов"),
+        _("To'plangan ball"),
         max_digits=10,
         decimal_places=2,
         default=0,
     )
     score_max = models.DecimalField(
-        _("Максимум баллов (на момент расчёта)"),
+        _("Maksimal ball (hisoblash vaqtida)"),
         max_digits=10,
         decimal_places=2,
         default=0,
     )
     question_sequence = models.JSONField(
-        _("Порядок вопросов (id)"),
+        _("Savollar tartibi (id)"),
         null=True,
         blank=True,
         help_text=_(
-            "Случайная перестановка при старте попытки; для next_question и согласованного порядка."
+            "Urinish boshida tasodifiy tartib; next_question va muvofiq tartib uchun."
         ),
+    )
+    termination_reason = models.CharField(
+        _("Tugatilish sababi"),
+        max_length=20,
+        choices=TerminationReason.choices,
+        blank=True,
     )
 
     class Meta:
-        verbose_name = _("Попытка")
-        verbose_name_plural = _("Попытки")
+        verbose_name = _("Urinish")
+        verbose_name_plural = _("Urinishlar")
         ordering = ("-started_at",)
         indexes = [
             models.Index(fields=("-started_at",)),
@@ -208,30 +217,28 @@ class TestAttempt(models.Model):
 
 
 class AttemptResponse(models.Model):
-    """Ответ на один вопрос в рамках попытки (сохраняется сразу при отправке)."""
-
     attempt = models.ForeignKey(
         TestAttempt,
         on_delete=models.CASCADE,
         related_name="responses",
-        verbose_name=_("Попытка"),
+        verbose_name=_("Urinish"),
     )
     question = models.ForeignKey(
         Question,
         on_delete=models.CASCADE,
-        verbose_name=_("Вопрос"),
+        verbose_name=_("Savol"),
     )
     selected_option = models.ForeignKey(
         AnswerOption,
         on_delete=models.CASCADE,
-        verbose_name=_("Выбранный вариант"),
+        verbose_name=_("Tanlangan variant"),
     )
-    is_correct = models.BooleanField(_("Верно"), default=False)
-    answered_at = models.DateTimeField(_("Отвечено"), auto_now_add=True)
+    is_correct = models.BooleanField(_("To'g'ri"), default=False)
+    answered_at = models.DateTimeField(_("Javob berilgan"), auto_now_add=True)
 
     class Meta:
-        verbose_name = _("Ответ в попытке")
-        verbose_name_plural = _("Ответы в попытке")
+        verbose_name = _("Urinishdagi javob")
+        verbose_name_plural = _("Urinishdagi javoblar")
         constraints = [
             models.UniqueConstraint(
                 fields=("attempt", "question"),
@@ -244,63 +251,59 @@ class AttemptResponse(models.Model):
 
 
 class AttemptSessionEventType(models.TextChoices):
-    """События с клиента при прохождении (visibility / focus)."""
-
-    PAGE_HIDDEN = "page_hidden", _("Вкладка скрыта (visibility)")
-    PAGE_VISIBLE = "page_visible", _("Вкладка снова видна")
-    WINDOW_BLUR = "window_blur", _("Окно потеряло фокус")
-    WINDOW_FOCUS = "window_focus", _("Окно получило фокус")
+    PAGE_HIDDEN = "page_hidden", _("Sahifa yashirildi (visibility)")
+    PAGE_VISIBLE = "page_visible", _("Sahifa yana ko'rinmoqda")
+    WINDOW_BLUR = "window_blur", _("Oyna fokusni yo'qotdi")
+    WINDOW_FOCUS = "window_focus", _("Oyna fokusni oldi")
 
 
 class AttemptSessionEvent(models.Model):
-    """Журнал ухода/возврата на вкладку и фокуса окна во время активной попытки."""
-
     attempt = models.ForeignKey(
         TestAttempt,
         on_delete=models.CASCADE,
         related_name="session_events",
-        verbose_name=_("Попытка"),
+        verbose_name=_("Urinish"),
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="attempt_session_events",
-        verbose_name=_("Пользователь"),
+        verbose_name=_("Foydalanuvchi"),
     )
     event_type = models.CharField(
-        _("Тип события"),
+        _("Hodisa turi"),
         max_length=32,
         choices=AttemptSessionEventType.choices,
         db_index=True,
     )
     created_at = models.DateTimeField(
-        _("Записано на сервере"), auto_now_add=True, db_index=True
+        _("Serverda qayd etilgan"), auto_now_add=True, db_index=True
     )
     client_timestamp = models.DateTimeField(
-        _("Время на клиенте"),
+        _("Mijoz vaqti"),
         null=True,
         blank=True,
-        help_text=_("ISO-время с браузера, если передано."),
+        help_text=_("Brauzerdan ISO vaqti, agar uzatilgan bo'lsa."),
     )
     duration_away_ms = models.PositiveIntegerField(
-        _("Длительность «вне вкладки», мс"),
+        _("Sahifadan tashqari davomiyligi, ms"),
         null=True,
         blank=True,
-        help_text=_("Обычно при page_visible: сколько мс вкладка была скрыта."),
+        help_text=_("Odatda page_visible da: sahifa necha ms yashiringan edi."),
     )
     leave_count = models.PositiveIntegerField(
-        _("Счётчик уходов (с клиента)"),
+        _("Ketish hisoblagichi (mijozdan)"),
         null=True,
         blank=True,
-        help_text=_("Накопительный номер ухода, если фронт ведёт счётчик."),
+        help_text=_("To'planma ketish raqami, agar front hisoblagichni boshqarsa."),
     )
-    meta = models.JSONField(_("Доп. данные"), default=dict, blank=True)
+    meta = models.JSONField(_("Qo'shimcha ma'lumotlar"), default=dict, blank=True)
     ip_address = models.GenericIPAddressField(_("IP"), null=True, blank=True)
     user_agent = models.CharField(_("User-Agent"), max_length=512, blank=True)
 
     class Meta:
-        verbose_name = _("Событие сессии попытки")
-        verbose_name_plural = _("События сессий попыток")
+        verbose_name = _("Urinish sessiyasi hodisasi")
+        verbose_name_plural = _("Urinish sessiyalari hodisalari")
         ordering = ("created_at",)
         indexes = [
             models.Index(fields=("attempt", "created_at")),
@@ -311,39 +314,71 @@ class AttemptSessionEvent(models.Model):
         return f"{self.attempt_id} {self.event_type} @ {self.created_at}"
 
 
+class UserProfile(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="profile",
+        verbose_name=_("Foydalanuvchi"),
+    )
+    region_type = models.CharField(
+        _("Hudud turi"),
+        max_length=20,
+        choices=REGION_TYPE_CHOICES,
+        default=REGION_MARKAZIY,
+    )
+    viloyat = models.CharField(
+        _("Viloyat"),
+        max_length=30,
+        choices=VILOYAT_CHOICES,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = _("Foydalanuvchi profili")
+        verbose_name_plural = _("Foydalanuvchilar profillari")
+
+    def __str__(self) -> str:
+        return f"Profil: {self.user}"
+
+    def clean(self):
+        if self.region_type == REGION_VILOYAT and not self.viloyat:
+            raise ValidationError({"viloyat": _("Viloyatni tanlang.")})
+        if self.region_type != REGION_VILOYAT:
+            self.viloyat = ""
+
+
 class AdminActionType(models.TextChoices):
-    CREATE = "create", _("Создание")
-    UPDATE = "update", _("Изменение")
-    DELETE = "delete", _("Удаление")
+    CREATE = "create", _("Yaratish")
+    UPDATE = "update", _("O'zgartirish")
+    DELETE = "delete", _("O'chirish")
 
 
 class AdminActionLog(models.Model):
-    """Отдельный журнал действий админов по объектам системы."""
-
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="admin_action_logs",
-        verbose_name=_("Кто выполнил"),
+        verbose_name=_("Kim bajardi"),
     )
     action_type = models.CharField(
-        _("Тип действия"),
+        _("Harakat turi"),
         max_length=20,
         choices=AdminActionType.choices,
     )
-    model_name = models.CharField(_("Модель"), max_length=120, db_index=True)
-    object_id = models.CharField(_("ID объекта"), max_length=64, blank=True)
-    object_repr = models.CharField(_("Объект"), max_length=255, blank=True)
-    changed_fields = models.JSONField(_("Изменённые поля"), default=list, blank=True)
-    ip_address = models.GenericIPAddressField(_("IP-адрес"), null=True, blank=True)
+    model_name = models.CharField(_("Model"), max_length=120, db_index=True)
+    object_id = models.CharField(_("Obyekt ID"), max_length=64, blank=True)
+    object_repr = models.CharField(_("Obyekt"), max_length=255, blank=True)
+    changed_fields = models.JSONField(_("O'zgartirilgan maydonlar"), default=list, blank=True)
+    ip_address = models.GenericIPAddressField(_("IP-manzil"), null=True, blank=True)
     user_agent = models.TextField(_("User-Agent"), blank=True)
-    created_at = models.DateTimeField(_("Время"), auto_now_add=True, db_index=True)
+    created_at = models.DateTimeField(_("Vaqt"), auto_now_add=True, db_index=True)
 
     class Meta:
-        verbose_name = _("Лог действий админа")
-        verbose_name_plural = _("Логи действий админа")
+        verbose_name = _("Admin harakatlari jurnali")
+        verbose_name_plural = _("Admin harakatlari jurnallari")
         ordering = ("-created_at",)
 
     def __str__(self):
