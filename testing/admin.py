@@ -3,6 +3,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
 import nested_admin
+from django import forms
 from django.contrib import admin
 from django.db.models import Count, Q
 from django.contrib.auth import get_user_model
@@ -14,7 +15,7 @@ from django.http import HttpResponse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from .constants import TEST_CURATOR_GROUP
+from .constants import TEST_CURATOR_GROUP, REGION_VILOYAT
 from .models import (
     AdminActionLog,
     AdminActionType,
@@ -25,6 +26,7 @@ from .models import (
     Question,
     Test,
     TestAttempt,
+    UserProfile,
 )
 from .services import sync_expired_attempt
 
@@ -49,8 +51,6 @@ def _get_client_ip(request):
 
 
 class AdminActionLoggingMixin:
-    """Унифицированное логирование create/update/delete из админки."""
-
     def _write_admin_log(self, request, obj, action_type, changed_fields=None):
         AdminActionLog.objects.create(
             actor=request.user if request.user.is_authenticated else None,
@@ -73,39 +73,86 @@ class AdminActionLoggingMixin:
         super().delete_model(request, obj)
 
     def delete_queryset(self, request, queryset):
-        # В админке "Удалить выбранные" вызывает именно этот метод.
         for obj in queryset:
             self._write_admin_log(request, obj, AdminActionType.DELETE, [])
         super().delete_queryset(request, queryset)
 
 
+class UserProfileForm(forms.ModelForm):
+    class Meta:
+        model = UserProfile
+        fields = ("region_type", "viloyat")
+
+    def clean(self):
+        cleaned_data = super().clean()
+        region_type = cleaned_data.get("region_type")
+        viloyat = cleaned_data.get("viloyat")
+        if region_type == REGION_VILOYAT and not viloyat:
+            self.add_error("viloyat", _("Viloyatni tanlang."))
+        elif region_type != REGION_VILOYAT:
+            cleaned_data["viloyat"] = ""
+        return cleaned_data
+
+
+class UserProfileInline(admin.StackedInline):
+    model = UserProfile
+    form = UserProfileForm
+    can_delete = False
+    min_num = 1
+    max_num = 1
+    extra = 0
+    verbose_name = _("Hudud")
+    verbose_name_plural = _("Hudud")
+
+    class Media:
+        js = ("testing/admin_region.js",)
+
+
 class RequiredDepartmentUserCreationForm(UserCreationForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["username"].label = _("Login")
+
     def clean_groups(self):
         groups = self.cleaned_data.get("groups")
         if not groups or groups.count() == 0:
-            raise ValidationError(_("Нужно выбрать хотя бы один отдел."))
+            raise ValidationError(_("Kamida bitta bo'lim tanlanishi kerak."))
         return groups
 
 
 class RequiredDepartmentUserChangeForm(UserChangeForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["username"].label = _("Login")
+
     def clean_groups(self):
         groups = self.cleaned_data.get("groups")
         if not groups or groups.count() == 0:
-            raise ValidationError(_("Нужно выбрать хотя бы один отдел."))
+            raise ValidationError(_("Kamida bitta bo'lim tanlanishi kerak."))
         return groups
 
 
 class UserAdmin(AdminActionLoggingMixin, BaseUserAdmin):
-    """Пользователь обязательно должен быть привязан минимум к одному отделу."""
-
     form = RequiredDepartmentUserChangeForm
     add_form = RequiredDepartmentUserCreationForm
+    inlines = (UserProfileInline,)
+
+    class Media:
+        js = ("testing/admin_region.js",)
+
     add_fieldsets = (
         (
             None,
             {
                 "classes": ("wide",),
-                "fields": ("username", "password1", "password2", "groups"),
+                "fields": (
+                    "last_name",
+                    "first_name",
+                    "username",
+                    "password1",
+                    "password2",
+                    "groups",
+                ),
             },
         ),
     )
@@ -116,11 +163,11 @@ class UserAdmin(AdminActionLoggingMixin, BaseUserAdmin):
             {
                 "classes": ("wide",),
                 "fields": (
+                    "last_name",
+                    "first_name",
                     "username",
                     "password1",
                     "password2",
-                    "first_name",
-                    "last_name",
                     "email",
                     "groups",
                 ),
@@ -130,9 +177,9 @@ class UserAdmin(AdminActionLoggingMixin, BaseUserAdmin):
 
     _curator_change_fieldsets = (
         (None, {"fields": ("username",)}),
-        (_("Пароль"), {"fields": ("password",)}),
-        (_("Личная информация"), {"fields": ("first_name", "last_name", "email")}),
-        (_("Отделы"), {"fields": ("groups",)}),
+        (_("Parol"), {"fields": ("password",)}),
+        (_("Shaxsiy ma'lumotlar"), {"fields": ("first_name", "last_name", "email")}),
+        (_("Bo'limlar"), {"fields": ("groups",)}),
     )
 
     def get_fieldsets(self, request, obj=None):
@@ -143,7 +190,6 @@ class UserAdmin(AdminActionLoggingMixin, BaseUserAdmin):
         return super().get_fieldsets(request, obj)
 
     def save_model(self, request, obj, form, change):
-        # Новые пользователи куратором — только обычные (не staff / не суперпользователь).
         if _is_test_curator(request) and not change:
             obj.is_staff = False
             obj.is_superuser = False
@@ -156,8 +202,6 @@ admin.site.register(User, UserAdmin)
 
 
 class AnswerOptionInlineFormSet(BaseInlineFormSet):
-    """Не даём сохранить вопрос без отмеченного верного варианта."""
-
     def clean(self):
         super().clean()
         correct_count = 0
@@ -171,14 +215,12 @@ class AnswerOptionInlineFormSet(BaseInlineFormSet):
         if correct_count < 1:
             raise ValidationError(
                 _(
-                    "Для каждого вопроса нужно отметить минимум один верный вариант ответа."
+                    "Har bir savol uchun kamida bitta to'g'ri javob varianti belgilanishi kerak."
                 )
             )
 
 
 class AnswerOptionNestedInline(nested_admin.NestedTabularInline):
-    """Ровно 4 варианта на вопрос при создании/редактировании теста."""
-
     model = AnswerOption
     extra = 4
     min_num = 4
@@ -211,25 +253,25 @@ class TestAdmin(AdminActionLoggingMixin, nested_admin.NestedModelAdmin):
     fieldsets = (
         (None, {"fields": ("title", "description", "is_active")}),
         (
-            _("Период проведения"),
+            _("O'tkazish davri"),
             {
                 "fields": ("conduct_starts_at", "conduct_ends_at"),
                 "description": _(
-                    "Вне этого интервала тест для сдающих недоступен. После окончания при сохранении снимается «Активен»."
+                    "Bu intervaldan tashqarida test topshiruvchilarga mavjud emas. Tugagandan so'ng saqlashda «Faol» olib tashlanadi."
                 ),
             },
         ),
-        (_("Параметры"), {"fields": ("time_limit_seconds", "allowed_groups")}),
-        (_("Служебное"), {"fields": ("created_at", "updated_at")}),
+        (_("Parametrlar"), {"fields": ("time_limit_seconds", "allowed_groups")}),
+        (_("Texnik ma'lumotlar"), {"fields": ("created_at", "updated_at")}),
     )
 
-    @admin.display(description=_("Период проведения"))
+    @admin.display(description=_("O'tkazish davri"))
     def conduct_schedule_display(self, obj: Test):
         from django.utils.formats import date_format
 
         s, e = obj.conduct_starts_at, obj.conduct_ends_at
         if not s and not e:
-            return _("без срока")
+            return _("muddatsiz")
 
         def fmt(dt):
             return date_format(dt, "SHORT_DATETIME_FORMAT") if dt else _("—")
@@ -269,8 +311,6 @@ class AttemptResponseInline(admin.TabularInline):
 
 
 class AttemptSessionEventInline(admin.TabularInline):
-    """Журнал visibility/focus на карточке попытки (только просмотр)."""
-
     model = AttemptSessionEvent
     extra = 0
     can_delete = False
@@ -291,7 +331,6 @@ class AttemptSessionEventInline(admin.TabularInline):
 
 
 def _fmt_duration(seconds):
-    """Конвертировать секунды в строку М:СС или Ч:ММ:СС."""
     if seconds is None:
         return "—"
     m, s = divmod(int(seconds), 60)
@@ -301,7 +340,7 @@ def _fmt_duration(seconds):
     return f"{m}:{s:02d}"
 
 
-@admin.action(description=_("Экспорт выбранных попыток в Excel"))
+@admin.action(description=_("Tanlangan urinishlarni Excelga eksport qilish"))
 def export_attempts_xlsx(modeladmin, request, queryset):
     qs = (
         queryset
@@ -322,24 +361,24 @@ def export_attempts_xlsx(modeladmin, request, queryset):
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Попытки"
+    ws.title = "Urinishlar"
 
     headers = [
         "ID",
-        "ФИО",
-        "Логин",
-        "Отдел",
-        "Тест",
-        "Статус",
-        "Начало",
-        "Конец",
-        "Длительность",
-        "Набрано",
-        "Максимум",
-        "Результат (%)",
-        "Отвечено вопросов",
-        "Уходы со вкладки",
-        "Уходы из окна",
+        "F.I.Sh.",
+        "Login",
+        "Bo'lim",
+        "Test",
+        "Holat",
+        "Boshlanish",
+        "Tugash",
+        "Davomiyligi",
+        "To'plangan",
+        "Maksimal",
+        "Natija (%)",
+        "Javob berilgan savollar",
+        "Sahifani tark etish",
+        "Oynani tark etish",
     ]
 
     header_font = Font(bold=True, color="FFFFFF")
@@ -382,14 +421,14 @@ def export_attempts_xlsx(modeladmin, request, queryset):
             obj._window_blur,
         ])
 
-    col_widths = [6, 28, 18, 20, 32, 16, 18, 18, 14, 10, 10, 14, 18, 16, 16]
+    col_widths = [6, 28, 18, 20, 32, 16, 18, 18, 14, 10, 10, 14, 22, 18, 16]
     for col_idx, width in enumerate(col_widths, start=1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
 
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
-    response["Content-Disposition"] = 'attachment; filename="attempts.xlsx"'
+    response["Content-Disposition"] = 'attachment; filename="urinishlar.xlsx"'
     wb.save(response)
     return response
 
@@ -401,6 +440,7 @@ class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
         "user",
         "test",
         "status",
+        "termination_reason_display",
         "tab_hidden_events_display",
         "window_blur_events_display",
         "started_at",
@@ -425,6 +465,7 @@ class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
         "started_at",
         "deadline_at",
         "finished_at",
+        "termination_reason",
         "duration_display",
         "score_earned",
         "score_max",
@@ -451,21 +492,34 @@ class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
             ]
         return inlines
 
-    @admin.display(description=_("Длительность"))
+    @admin.display(description=_("Tugatilish sababi"))
+    def termination_reason_display(self, obj: TestAttempt):
+        labels = {
+            "tab_switch": "Boshqa vkladkaga o'tdi",
+            "window_blur": "Boshqa ilovaga o'tdi",
+        }
+        reason = obj.termination_reason
+        if not reason:
+            return format_html('<span style="color:#9ca3af">—</span>')
+        return format_html(
+            '<span style="color:#dc2626;font-weight:600">⛔ {}</span>',
+            labels.get(reason, reason),
+        )
+
+    @admin.display(description=_("Davomiyligi"))
     def duration_display(self, obj: TestAttempt):
         sec = obj.duration_seconds
         if sec is None:
             return _("—")
         if sec < 60:
-            return _("{n} с").format(n=int(sec))
+            return _("{n} s").format(n=int(sec))
         m, s = divmod(int(sec), 60)
-        return _("{m} мин {s} с").format(m=m, s=s)
+        return _("{m} daq {s} s").format(m=m, s=s)
 
-    @admin.display(description=_("Баллы"))
+    @admin.display(description=_("Balllar"))
     def score_display(self, obj: TestAttempt):
         if obj.score_max and obj.score_max > 0:
             pct = (obj.score_earned / obj.score_max) * 100
-            # format_html экранирует аргументы в SafeString — нельзя использовать {:.0f} в шаблоне.
             pct_label = str(int(round(float(pct))))
             return format_html(
                 "{} / {} (<span>{}%</span>)",
@@ -475,12 +529,12 @@ class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
             )
         return f"{obj.score_earned} / {obj.score_max}"
 
-    @admin.display(description=_("Отвечено вопросов"))
+    @admin.display(description=_("Javob berilgan savollar"))
     def answered_count(self, obj: TestAttempt):
         return obj.responses.count()
 
     @admin.display(
-        description=_("Вкладка скрыта"),
+        description=_("Sahifa yashirildi"),
         ordering="_tab_hidden_count",
     )
     def tab_hidden_events_display(self, obj: TestAttempt):
@@ -493,12 +547,12 @@ class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
             return format_html('<span style="color:#9ca3af">—</span>')
         return format_html(
             '<span style="color:#b45309;font-weight:600" title="{}">⚠ {}</span>',
-            _("Зафиксировано событий «Вкладка скрыта» (visibility)"),
+            _("«Sahifa yashirildi» (visibility) hodisalari qayd etildi"),
             n,
         )
 
     @admin.display(
-        description=_("Окно без фокуса"),
+        description=_("Oyna fokussiz"),
         ordering="_window_blur_count",
     )
     def window_blur_events_display(self, obj: TestAttempt):
@@ -511,7 +565,7 @@ class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
             return format_html('<span style="color:#9ca3af">—</span>')
         return format_html(
             '<span style="color:#7c3aed;font-weight:600" title="{}">◆ {}</span>',
-            _("Зафиксировано событий «Окно потеряло фокус»"),
+            _("«Oyna fokusni yo'qotdi» hodisalari qayd etildi"),
             n,
         )
 
@@ -538,7 +592,7 @@ class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
         return qs
 
     @admin.action(
-        description=_("Обновить статус по истечении времени (таймаут)"),
+        description=_("Vaqt tugagandan so'ng holatni yangilash (taymaut)"),
     )
     def action_sync_timeout(self, request, queryset):
         for att in queryset:
@@ -547,8 +601,6 @@ class TestAttemptAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
 
 @admin.register(AttemptSessionEvent)
 class AttemptSessionEventAdmin(admin.ModelAdmin):
-    """Журнал уходов с вкладки / фокуса во время попытки (только чтение)."""
-
     list_display = (
         "id",
         "attempt",
@@ -597,8 +649,6 @@ class AttemptResponseAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
 
 @admin.register(AdminActionLog)
 class AdminActionLogAdmin(admin.ModelAdmin):
-    """Просмотр журнала доступен только отдельной роли."""
-
     list_display = (
         "created_at",
         "actor",
