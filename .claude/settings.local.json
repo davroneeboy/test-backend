@@ -4,7 +4,14 @@
       "Bash(find . -name \"*.py\" -type f ! -path \"./.*\" ! -path \"./.venv/*\" ! -path \"./testing/migrations/*\" -exec wc -l {} +)",
       "Bash(.venv/Scripts/pip install:*)",
       "Bash(.venv/Scripts/python.exe:*)",
-      "Bash(.venv/Scripts/pip show:*)"
+      "Bash(.venv/Scripts/pip show:*)",
+      "Bash(.venv/Scripts/python manage.py check)",
+      "Bash(.venv/Scripts/python manage.py migrate)",
+      "Bash(.venv/Scripts/python manage.py shell -c ' *)",
+      "Bash(.venv/Scripts/python manage.py findstatic testing/admin_region.js)",
+      "Bash(git -C \"C:\\\\Users\\\\aod1\\\\Desktop\\\\test-backend\" status)",
+      "Bash(git -C \"C:\\\\Users\\\\aod1\\\\Desktop\\\\test-backend\" diff --stat)",
+      "Bash(git *)"
     ]
   }
 }
