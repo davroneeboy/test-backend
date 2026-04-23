@@ -344,18 +344,11 @@ def _fmt_duration(seconds):
 def export_attempts_xlsx(modeladmin, request, queryset):
     qs = (
         queryset
-        .select_related("user", "test")
+        .select_related("user", "user__profile", "test")
         .prefetch_related("user__groups")
         .annotate(
-            _tab_hidden=Count(
-                "session_events",
-                filter=Q(session_events__event_type=AttemptSessionEventType.PAGE_HIDDEN),
-            ),
-            _window_blur=Count(
-                "session_events",
-                filter=Q(session_events__event_type=AttemptSessionEventType.WINDOW_BLUR),
-            ),
-            _answered=Count("responses"),
+            _answered=Count("responses", distinct=True),
+            _total_q=Count("test__questions", distinct=True),
         )
     )
 
@@ -364,21 +357,17 @@ def export_attempts_xlsx(modeladmin, request, queryset):
     ws.title = "Urinishlar"
 
     headers = [
-        "ID",
+        "Hudud turi",
+        "Viloyat",
         "F.I.Sh.",
         "Login",
         "Bo'lim",
-        "Test",
-        "Holat",
+        "Test nomi",
+        "Jami savollar",
+        "Javob berilgan",
+        "Natija (%)",
         "Boshlanish",
         "Tugash",
-        "Davomiyligi",
-        "To'plangan",
-        "Maksimal",
-        "Natija (%)",
-        "Javob berilgan savollar",
-        "Sahifani tark etish",
-        "Oynani tark etish",
     ]
 
     header_font = Font(bold=True, color="FFFFFF")
@@ -397,6 +386,9 @@ def export_attempts_xlsx(modeladmin, request, queryset):
     fmt_dt = "%d.%m.%Y %H:%M"
 
     for obj in qs:
+        profile = getattr(obj.user, "profile", None)
+        region_type = profile.get_region_type_display() if profile else "—"
+        viloyat = (profile.get_viloyat_display() if profile and profile.viloyat else "—")
         department = obj.user.groups.first()
         pct = (
             round(float(obj.score_earned / obj.score_max * 100), 1)
@@ -404,24 +396,20 @@ def export_attempts_xlsx(modeladmin, request, queryset):
             else "—"
         )
         ws.append([
-            obj.pk,
+            region_type,
+            viloyat,
             obj.user.get_full_name() or obj.user.username,
             obj.user.username,
             department.name if department else "—",
             str(obj.test),
-            obj.get_status_display(),
+            obj._total_q,
+            obj._answered,
+            pct,
             obj.started_at.strftime(fmt_dt) if obj.started_at else "—",
             obj.finished_at.strftime(fmt_dt) if obj.finished_at else "—",
-            _fmt_duration(obj.duration_seconds),
-            float(obj.score_earned),
-            float(obj.score_max),
-            pct,
-            obj._answered,
-            obj._tab_hidden,
-            obj._window_blur,
         ])
 
-    col_widths = [6, 28, 18, 20, 32, 16, 18, 18, 14, 10, 10, 14, 22, 18, 16]
+    col_widths = [18, 24, 28, 18, 20, 32, 14, 14, 12, 18, 18]
     for col_idx, width in enumerate(col_widths, start=1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
 
