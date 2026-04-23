@@ -19,6 +19,7 @@ from .models import (
     Question,
     Test,
     TestAttempt,
+    TerminationReason,
 )
 
 
@@ -176,6 +177,28 @@ def abandon_attempt(attempt: TestAttempt) -> TestAttempt:
         _recalc_scores(attempt)
         attempt.save(
             update_fields=("status", "finished_at", "score_earned", "score_max")
+        )
+        return attempt
+
+
+def terminate_attempt(attempt: TestAttempt, reason: str) -> TestAttempt:
+    """Forcibly close attempt (tab/app switch): score_earned reset to 0."""
+    with transaction.atomic():
+        attempt = TestAttempt.objects.select_for_update().get(pk=attempt.pk)
+        if attempt.status != AttemptStatus.IN_PROGRESS:
+            return attempt
+        attempt.status = AttemptStatus.TERMINATED
+        attempt.finished_at = timezone.now()
+        attempt.termination_reason = reason
+        attempt.score_max = (
+            attempt.test.questions.aggregate(total=Sum("points"))["total"] or 0
+        )
+        attempt.score_earned = 0
+        attempt.save(
+            update_fields=(
+                "status", "finished_at", "termination_reason",
+                "score_earned", "score_max",
+            )
         )
         return attempt
 
