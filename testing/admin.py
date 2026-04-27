@@ -24,6 +24,7 @@ from .models import (
     AttemptSessionEvent,
     AttemptSessionEventType,
     Question,
+    QuestionGroup,
     Test,
     TestAttempt,
     UserProfile,
@@ -204,36 +205,44 @@ admin.site.register(User, UserAdmin)
 class AnswerOptionInlineFormSet(BaseInlineFormSet):
     def clean(self):
         super().clean()
-        correct_count = 0
-        for form in self.forms:
-            if not hasattr(form, "cleaned_data"):
-                continue
-            if form.cleaned_data.get("DELETE", False):
-                continue
-            if form.cleaned_data.get("is_correct"):
-                correct_count += 1
-        if correct_count < 1:
-            raise ValidationError(
-                _(
-                    "Har bir savol uchun kamida bitta to'g'ri javob varianti belgilanishi kerak."
-                )
+        if any(self.errors):
+            return
+        valid_forms = [
+            f for f in self.forms
+            if hasattr(f, "cleaned_data")
+            and not f.cleaned_data.get("DELETE", False)
+            and f.cleaned_data.get("text", "").strip()
+        ]
+        correct_count = sum(1 for f in valid_forms if f.cleaned_data.get("is_correct"))
+        if valid_forms and correct_count < 1:
+            valid_forms[0].add_error(
+                "is_correct",
+                _("Kamida bitta to'g'ri javob belgilanishi kerak."),
             )
 
 
 class AnswerOptionNestedInline(nested_admin.NestedTabularInline):
     model = AnswerOption
     extra = 4
-    min_num = 4
-    max_num = 4
+    min_num = 2
+    max_num = 10
     fields = ("text", "is_correct")
     formset = AnswerOptionInlineFormSet
 
 
 class QuestionNestedInline(nested_admin.NestedStackedInline):
     model = Question
-    extra = 1
+    fk_name = "group"
+    extra = 0
     fields = ("order", "text", "points")
     inlines = (AnswerOptionNestedInline,)
+
+
+class QuestionGroupNestedInline(nested_admin.NestedStackedInline):
+    model = QuestionGroup
+    extra = 0
+    fields = ("department", "order", "questions_to_show")
+    inlines = (QuestionNestedInline,)
 
 
 @admin.register(Test)
@@ -248,7 +257,7 @@ class TestAdmin(AdminActionLoggingMixin, nested_admin.NestedModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("title", "description")
     filter_horizontal = ("allowed_groups",)
-    inlines = (QuestionNestedInline,)
+    inlines = (QuestionGroupNestedInline,)
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (
         (None, {"fields": ("title", "description", "is_active")}),

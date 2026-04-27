@@ -85,12 +85,57 @@ class Test(models.Model):
         return sum(q.points for q in self.questions.all()) or 0
 
 
+class QuestionGroup(models.Model):
+    test = models.ForeignKey(
+        Test,
+        on_delete=models.CASCADE,
+        related_name="question_groups",
+        verbose_name=_("Test"),
+    )
+    department = models.ForeignKey(
+        Group,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="question_groups",
+        verbose_name=_("Bo'lim"),
+    )
+    order = models.PositiveSmallIntegerField(_("Tartib"), default=0)
+    questions_to_show = models.PositiveSmallIntegerField(
+        _("Ko'rsatiladigan savollar soni"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Bo'sh — barcha savollar. Har bir urinishda tasodifiy tanlanadi."
+        ),
+    )
+
+    class Meta:
+        verbose_name = _("Savol guruhi")
+        verbose_name_plural = _("Savol guruhlari")
+        ordering = ("test", "order", "id")
+
+    def __str__(self) -> str:
+        dept = self.department.name if self.department_id else _("Guruh")
+        return f"{self.test.title}: {dept}"
+
+
 class Question(models.Model):
     test = models.ForeignKey(
         Test,
         on_delete=models.CASCADE,
         related_name="questions",
         verbose_name=_("Test"),
+        null=True,
+        blank=True,
+    )
+    group = models.ForeignKey(
+        QuestionGroup,
+        on_delete=models.CASCADE,
+        related_name="questions",
+        verbose_name=_("Savol guruhi"),
+        null=True,
+        blank=True,
     )
     text = models.TextField(_("Savol matni"))
     order = models.PositiveSmallIntegerField(_("Tartib"), default=0)
@@ -102,7 +147,12 @@ class Question(models.Model):
         ordering = ("test", "order", "id")
 
     def __str__(self) -> str:
-        return f"{self.test.title}: {self.text[:50]}"
+        return f"{self.test.title}: {self.text[:50]}" if self.test_id else self.text[:50]
+
+    def save(self, *args, **kwargs):
+        if self.group_id and not self.test_id:
+            self.test_id = self.group.test_id
+        super().save(*args, **kwargs)
 
 
 class AnswerOption(models.Model):

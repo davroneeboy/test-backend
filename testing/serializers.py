@@ -114,7 +114,7 @@ class ExamQuestionSerializer(serializers.ModelSerializer):
 
 
 class TestListSerializer(serializers.ModelSerializer):
-    question_count = serializers.IntegerField(read_only=True)
+    question_count = serializers.SerializerMethodField()
     conduct_period_open = serializers.SerializerMethodField()
 
     class Meta:
@@ -134,6 +134,17 @@ class TestListSerializer(serializers.ModelSerializer):
 
     def get_conduct_period_open(self, obj):
         return obj.is_conduct_period_open()
+
+    def get_question_count(self, obj):
+        groups = list(obj.question_groups.all())
+        if not groups:
+            return getattr(obj, "question_count", None) or obj.questions.count()
+        total = 0
+        for group in groups:
+            n = group.questions_to_show
+            q_count = len(group.questions.all())
+            total += min(n, q_count) if n else q_count
+        return total
 
 
 class TestDetailSerializer(serializers.ModelSerializer):
@@ -160,16 +171,43 @@ class TestDetailSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        questions = data.get("questions")
+        questions = data.get("questions") or []
+
+        request = self.context.get("request")
+        user = request.user if request else None
+        is_staff = getattr(user, "is_staff", False)
+        user_pk = user.pk if user and user.is_authenticated else 0
+
+        if not is_staff:
+            seq = self.context.get("question_sequence")
+            if seq is not None:
+                # Активная попытка — фильтруем по sequence
+                seq_set = set(seq)
+                q_by_id = {q["id"]: q for q in questions if q["id"] in seq_set}
+                questions = [q_by_id[qid] for qid in seq if qid in q_by_id]
+            else:
+                # Нет активной попытки — применяем лимиты групп (детерминированно)
+                groups = list(instance.question_groups.prefetch_related("questions").order_by("order"))
+                if groups:
+                    rng = random.Random(user_pk * 10 ** 6 + instance.pk)
+                    sampled_ids = set()
+                    for group in groups:
+                        gq_ids = list(group.questions.values_list("pk", flat=True))
+                        n = group.questions_to_show
+                        if n and n < len(gq_ids):
+                            gq_ids = rng.sample(gq_ids, n)
+                        sampled_ids.update(gq_ids)
+                    questions = [q for q in questions if q["id"] in sampled_ids]
+
         if questions:
-            request = self.context.get("request")
-            user_pk = request.user.pk if request and request.user.is_authenticated else 0
             rng = random.Random(user_pk * 10 ** 6 + instance.pk)
             rng.shuffle(questions)
             for q in questions:
                 opts = q.get("options")
                 if opts:
                     rng.shuffle(opts)
+
+        data["questions"] = questions
         return data
 
 
@@ -294,7 +332,10 @@ class AttemptSerializer(serializers.ModelSerializer):
         }
 
     def get_questions_total(self, obj):
-        return len(obj.test.questions.all())
+        seq = obj.question_sequence
+        if seq is not None:
+            return len(seq)
+        return obj.test.questions.count()
 
     def get_questions_answered(self, obj):
         return len(obj.responses.all())

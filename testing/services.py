@@ -11,6 +11,7 @@ import random
 from django.db import transaction
 from django.db.models import DecimalField, OuterRef, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
+
 from django.utils import timezone
 
 from .models import (
@@ -57,13 +58,25 @@ def start_attempt(user, test: Test) -> TestAttempt:
     deadline = None
     if test.time_limit_seconds:
         deadline = now + timezone.timedelta(seconds=test.time_limit_seconds)
+
+    groups = list(test.question_groups.prefetch_related("questions").order_by("order"))
+    if groups:
+        q_ids = []
+        for group in groups:
+            gq_ids = list(group.questions.values_list("pk", flat=True))
+            n = group.questions_to_show
+            if n and n < len(gq_ids):
+                gq_ids = random.sample(gq_ids, n)
+            q_ids.extend(gq_ids)
+        random.shuffle(q_ids)
+    else:
+        q_ids = list(test.questions.order_by("order", "id").values_list("pk", flat=True))
+        random.shuffle(q_ids)
+
     max_pts = (
-        test.questions.aggregate(total=Sum("points"))["total"] or 0
-    )
-    q_ids = list(
-        test.questions.order_by("order", "id").values_list("pk", flat=True)
-    )
-    random.shuffle(q_ids)
+        Question.objects.filter(pk__in=q_ids).aggregate(total=Sum("points"))["total"] or 0
+    ) if q_ids else 0
+
     return TestAttempt.objects.create(
         user=user,
         test=test,
@@ -101,40 +114,17 @@ def _earned_subquery() -> Coalesce:
     )
 
 
-def _max_subquery() -> Coalesce:
-    """Максимальный балл за тест — коррелированный подзапрос."""
-    return Coalesce(
-        Subquery(
-            Question.objects
-            .filter(test_id=OuterRef("test_id"))
-            .values("test_id")
-            .annotate(s=Sum("points"))
-            .values("s")[:1],
-            output_field=_SCORE_FIELD,
-        ),
-        Value(0, output_field=_SCORE_FIELD),
-    )
-
-
 def _save_scores_atomically(
     attempt: TestAttempt,
     extra_fields: dict | None = None,
 ) -> None:
-    """
-    Пересчитывает score_earned / score_max и сохраняет их одним UPDATE-запросом.
-
-    Устраняет race condition: вместо read-modify-write на стороне Python
-    выполняется одна атомарная операция на уровне БД. Никакой другой транзакции
-    не виден «старый» score между чтением и записью.
-    """
     updates: dict = {
         "score_earned": _earned_subquery(),
-        "score_max": _max_subquery(),
         **(extra_fields or {}),
     }
     TestAttempt.objects.filter(pk=attempt.pk).update(**updates)
-    refresh = ["score_earned", "score_max"] + [
-        k for k in (extra_fields or {}) if k not in ("score_earned", "score_max")
+    refresh = ["score_earned"] + [
+        k for k in (extra_fields or {}) if k != "score_earned"
     ]
     attempt.refresh_from_db(fields=refresh)
 
@@ -173,7 +163,8 @@ def submit_answer(
                 "is_correct": selected_option.is_correct,
             },
         )
-        total_questions = attempt.test.questions.count()
+        seq = attempt.question_sequence
+        total_questions = len(seq) if seq else attempt.test.questions.count()
         answered_questions = attempt.responses.count()
         is_complete = total_questions > 0 and answered_questions >= total_questions
         _save_scores_atomically(
@@ -224,10 +215,9 @@ def terminate_attempt(attempt: TestAttempt, reason: str) -> TestAttempt:
             finished_at=timezone.now(),
             termination_reason=reason,
             score_earned=Value(0, output_field=_SCORE_FIELD),
-            score_max=_max_subquery(),
         )
         attempt.refresh_from_db(
-            fields=["status", "finished_at", "termination_reason", "score_earned", "score_max"]
+            fields=["status", "finished_at", "termination_reason", "score_earned"]
         )
         return attempt
 

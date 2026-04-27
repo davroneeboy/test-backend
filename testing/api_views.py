@@ -64,6 +64,7 @@ def _test_queryset_staff_annotated():
     return Test.objects.prefetch_related(
         "questions__options",
         "allowed_groups",
+        "question_groups__questions",
     ).annotate(question_count=Count("questions", distinct=True))
 
 
@@ -148,7 +149,7 @@ class TestListView(generics.ListCreateAPIView):
     def get_queryset(self):
         base = Test.objects.annotate(
             question_count=Count("questions", distinct=True)
-        ).prefetch_related("allowed_groups")
+        ).prefetch_related("allowed_groups", "question_groups__questions")
         user = self.request.user
         if user.is_staff:
             return base.order_by("?")
@@ -182,6 +183,23 @@ class TestDetailView(generics.RetrieveUpdateDestroyAPIView):
         if user.is_staff:
             return base.order_by("?")
         return _accessible_tests_qs(base, user)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        context = self.get_serializer_context()
+        if not request.user.is_staff:
+            active_seq = (
+                TestAttempt.objects.filter(
+                    user=request.user,
+                    test=instance,
+                    status=AttemptStatus.IN_PROGRESS,
+                )
+                .values_list("question_sequence", flat=True)
+                .first()
+            )
+            if active_seq is not None:
+                context["question_sequence"] = active_seq
+        return Response(TestDetailSerializer(instance, context=context).data)
 
     def update(self, request, *args, **kwargs):
         partial = request.method == "PATCH"

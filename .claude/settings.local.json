@@ -12,7 +12,13 @@
       "Bash(git -C \"C:\\\\Users\\\\aod1\\\\Desktop\\\\test-backend\" status)",
       "Bash(git -C \"C:\\\\Users\\\\aod1\\\\Desktop\\\\test-backend\" diff --stat)",
       "Bash(git *)",
-      "Bash(.venv/Scripts/python manage.py test testing --verbosity=2)"
+      "Bash(.venv/Scripts/python manage.py test testing --verbosity=2)",
+      "Bash(del *)",
+      "Bash(ls venv*)",
+      "Bash(ls .venv*)",
+      "Bash(ls env*)",
+      "Bash(Scripts/python.exe manage.py check)",
+      "PowerShell(& \"C:\\\\Users\\\\davro\\\\OneDrive\\\\Desktop\\\\test-backend\\\\.venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\davro\\\\OneDrive\\\\Desktop\\\\test-backend\\\\manage.py\" check)"
     ]
   }
 }
