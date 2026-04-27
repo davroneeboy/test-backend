@@ -188,7 +188,7 @@ class TestDetailSerializer(serializers.ModelSerializer):
                 q_by_id = {q["id"]: q for q in questions if q["id"] in seq_set}
                 questions = [q_by_id[qid] for qid in seq if qid in q_by_id]
             else:
-                # Нет активной попытки — применяем лимиты групп (детерминированно)
+                # Нет активной попытки — применяем лимиты
                 groups = list(instance.question_groups.prefetch_related("questions").order_by("order"))
                 if groups:
                     rng = random.Random(user_pk * 10 ** 6 + instance.pk)
@@ -200,6 +200,12 @@ class TestDetailSerializer(serializers.ModelSerializer):
                             gq_ids = rng.sample(gq_ids, n)
                         sampled_ids.update(gq_ids)
                     questions = [q for q in questions if q["id"] in sampled_ids]
+                else:
+                    # Нет групп — применяем questions_to_show на уровне теста
+                    n = instance.questions_to_show
+                    if n and n < len(questions):
+                        rng = random.Random(user_pk * 10 ** 6 + instance.pk)
+                        questions = rng.sample(questions, n)
 
         if questions:
             rng = random.Random(user_pk * 10 ** 6 + instance.pk)
