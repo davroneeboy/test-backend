@@ -138,7 +138,9 @@ class TestListSerializer(serializers.ModelSerializer):
     def get_question_count(self, obj):
         groups = list(obj.question_groups.all())
         if not groups:
-            return getattr(obj, "question_count", None) or obj.questions.count()
+            total = obj.questions.count()
+            n = obj.questions_to_show
+            return min(n, total) if n else total
         total = 0
         for group in groups:
             n = group.questions_to_show

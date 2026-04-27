@@ -9,7 +9,6 @@ from django.db.models import Count, Q
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
-from django.core.exceptions import ValidationError
 from django.forms.models import BaseInlineFormSet
 from django.http import HttpResponse
 from django.utils.html import format_html
@@ -114,23 +113,11 @@ class RequiredDepartmentUserCreationForm(UserCreationForm):
         super().__init__(*args, **kwargs)
         self.fields["username"].label = _("Login")
 
-    def clean_groups(self):
-        groups = self.cleaned_data.get("groups")
-        if not groups or groups.count() == 0:
-            raise ValidationError(_("Kamida bitta bo'lim tanlanishi kerak."))
-        return groups
-
 
 class RequiredDepartmentUserChangeForm(UserChangeForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["username"].label = _("Login")
-
-    def clean_groups(self):
-        groups = self.cleaned_data.get("groups")
-        if not groups or groups.count() == 0:
-            raise ValidationError(_("Kamida bitta bo'lim tanlanishi kerak."))
-        return groups
 
 
 class UserAdmin(AdminActionLoggingMixin, BaseUserAdmin):
@@ -270,7 +257,7 @@ class TestAdmin(AdminActionLoggingMixin, nested_admin.NestedModelAdmin):
                 ),
             },
         ),
-        (_("Parametrlar"), {"fields": ("time_limit_seconds", "allowed_groups")}),
+        (_("Parametrlar"), {"fields": ("time_limit_seconds", "questions_to_show", "allowed_groups")}),
         (_("Texnik ma'lumotlar"), {"fields": ("created_at", "updated_at")}),
     )
 

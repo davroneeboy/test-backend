@@ -35,6 +35,15 @@ class Test(models.Model):
             "Bo'sh — cheklovsiz. Vaqt tugaganda mavjud javoblar saqlanadi."
         ),
     )
+    questions_to_show = models.PositiveSmallIntegerField(
+        _("Ko'rsatiladigan savollar soni"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Bo'sh — barcha savollar ko'rsatiladi. "
+            "Savol guruhlari bo'lmasa, har bir urinishda shu miqdor tasodifiy tanlanadi."
+        ),
+    )
     is_active = models.BooleanField(_("Faol"), default=True)
     allowed_groups = models.ManyToManyField(
         Group,

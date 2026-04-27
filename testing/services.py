@@ -71,7 +71,11 @@ def start_attempt(user, test: Test) -> TestAttempt:
         random.shuffle(q_ids)
     else:
         q_ids = list(test.questions.order_by("order", "id").values_list("pk", flat=True))
-        random.shuffle(q_ids)
+        n = test.questions_to_show
+        if n and n < len(q_ids):
+            q_ids = random.sample(q_ids, n)
+        else:
+            random.shuffle(q_ids)
 
     max_pts = (
         Question.objects.filter(pk__in=q_ids).aggregate(total=Sum("points"))["total"] or 0
