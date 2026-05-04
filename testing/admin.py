@@ -298,12 +298,13 @@ class TestAdmin(AdminActionLoggingMixin, nested_admin.NestedModelAdmin):
 
     def proctoring_view(self, request):
         from .constants import REGION_TYPE_CHOICES, VILOYAT_CHOICES, REGION_VILOYAT
-        from django.db.models import F
+        from .services import sync_expired_attempt as _sync
         now = timezone.now()
-        # Один UPDATE для всех просроченных: статус + finished_at
-        TestAttempt.objects.filter(
+        # sync_expired_attempt пересчитывает score_earned перед закрытием
+        for stale in TestAttempt.objects.filter(
             status=AttemptStatus.IN_PROGRESS, deadline_at__lte=now
-        ).update(status=AttemptStatus.TIMED_OUT, finished_at=F("deadline_at"))
+        ).select_related("test"):
+            _sync(stale)
 
         qs = (
             TestAttempt.objects.filter(status=AttemptStatus.IN_PROGRESS)

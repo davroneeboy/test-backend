@@ -118,7 +118,6 @@ class ProctoringConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({"type": "frame", "data": event["frame"]}))
 
     async def proctoring_expired(self, event):
-        import json
         await self.send(text_data=json.dumps({"type": "expired", "attempt_id": event["attempt_id"]}))
 
     # ── helpers ──────────────────────────────────────────────────────────────
@@ -164,13 +163,15 @@ class ProctoringConsumer(AsyncWebsocketConsumer):
         return attempt["deadline_at"] if attempt else None
 
     async def _schedule_expired_notify(self, deadline):
-        now = timezone.now()
-        delay = max(0.0, (deadline - now).total_seconds())
-        await asyncio.sleep(delay)
-        await sync_expired_attempt_async(self.attempt_id)
         try:
+            now = timezone.now()
+            delay = max(0.0, (deadline - now).total_seconds())
+            await asyncio.sleep(delay)
+            await sync_expired_attempt_async(self.attempt_id)
             await self.send(text_data=json.dumps({"type": "expired", "attempt_id": self.attempt_id}))
             await self.close(1000)
+        except asyncio.CancelledError:
+            pass
         except Exception:
             pass
 
