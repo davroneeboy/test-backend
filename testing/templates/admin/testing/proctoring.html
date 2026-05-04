@@ -1,0 +1,103 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Прокторинг — активные тесты{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">Главная</a> &rsaquo; <a href="../">Тесты</a> &rsaquo; Прокторинг
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Прокторинг — активные попытки</h1>
+
+<div id="no-attempts" style="display:none; padding:1em; color:#888;">
+  Нет активных попыток.
+</div>
+
+<div id="grid" style="
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+">
+  {% for attempt in attempts %}
+  <div class="proctoring-card" style="
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  ">
+    <div style="padding: 8px 12px; background: #417690; color: #fff; font-size: 0.85em;">
+      <strong>{{ attempt.user.get_full_name|default:attempt.user.username }}</strong>
+      <span style="float:right; opacity:0.8;">{{ attempt.test.title }}</span>
+    </div>
+    <canvas
+      id="canvas-{{ attempt.pk }}"
+      data-attempt="{{ attempt.pk }}"
+      width="320" height="240"
+      style="width:100%; display:block; background:#111;"
+    ></canvas>
+    <div style="padding:6px 12px; font-size:0.8em; color:#666;">
+      <span id="status-{{ attempt.pk }}">Ожидание подключения…</span>
+    </div>
+  </div>
+  {% empty %}
+  <p style="color:#888;">Нет активных попыток.</p>
+  {% endfor %}
+</div>
+
+<script>
+(function () {
+  const protocol = location.protocol === "https:" ? "wss" : "ws";
+  const canvases = document.querySelectorAll("canvas[data-attempt]");
+
+  if (canvases.length === 0) {
+    document.getElementById("no-attempts").style.display = "block";
+    document.getElementById("grid").style.display = "none";
+    return;
+  }
+
+  canvases.forEach(function (canvas) {
+    const attemptId = canvas.dataset.attempt;
+    const ctx = canvas.getContext("2d");
+    const statusEl = document.getElementById("status-" + attemptId);
+    const wsUrl = protocol + "://" + location.host + "/ws/proctoring/" + attemptId + "/?role=watcher";
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = function () {
+      statusEl.textContent = "Подключено, ожидание камеры…";
+      statusEl.style.color = "#4CAF50";
+    };
+
+    ws.onmessage = function (e) {
+      const data = JSON.parse(e.data);
+      if (data.type !== "frame" || !data.data) return;
+      const img = new Image();
+      img.onload = function () { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); };
+      img.src = data.data;
+      statusEl.textContent = "Live ● " + new Date().toLocaleTimeString();
+      statusEl.style.color = "#4CAF50";
+    };
+
+    ws.onclose = function () {
+      statusEl.textContent = "Отключено";
+      statusEl.style.color = "#e74c3c";
+      ctx.fillStyle = "#222";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#888";
+      ctx.font = "14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Нет сигнала", canvas.width / 2, canvas.height / 2);
+    };
+
+    ws.onerror = function () {
+      statusEl.textContent = "Ошибка подключения";
+      statusEl.style.color = "#e74c3c";
+    };
+  });
+})();
+</script>
+{% endblock %}

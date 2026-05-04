@@ -24,6 +24,7 @@ from .models import (
     AttemptResponse,
     AttemptSessionEvent,
     AttemptSessionEventType,
+    AttemptStatus,
     Question,
     QuestionGroup,
     Test,
@@ -286,8 +287,27 @@ class TestAdmin(AdminActionLoggingMixin, nested_admin.NestedModelAdmin):
                 self.admin_site.admin_view(self.import_view),
                 name="testing_test_import",
             ),
+            path(
+                "proctoring/",
+                self.admin_site.admin_view(self.proctoring_view),
+                name="testing_test_proctoring",
+            ),
         ]
         return custom + super().get_urls()
+
+    def proctoring_view(self, request):
+        attempts = (
+            TestAttempt.objects.filter(status=AttemptStatus.IN_PROGRESS)
+            .select_related("user", "test")
+            .order_by("started_at")
+        )
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Прокторинг",
+            "attempts": attempts,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/testing/proctoring.html", context)
 
     def import_view(self, request):
         from .excel_import import ParseError, import_test, parse_excel
@@ -721,6 +741,7 @@ class AttemptResponseAdmin(AdminActionLoggingMixin, admin.ModelAdmin):
     list_filter = ("is_correct", "attempt__test")
     search_fields = ("attempt__user__username", "question__text")
     readonly_fields = ("answered_at",)
+
 
 
 @admin.register(AdminActionLog)

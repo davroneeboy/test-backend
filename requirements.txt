@@ -12,3 +12,7 @@ sentry-sdk[django]>=2.0,<3
 # Setuptools 81+ помечает pkg_resources устаревшим; линия ниже гасит лишние предупреждения,
 # если какая-то зависимость всё ещё тянет pkg_resources.
 setuptools>=69,<81
+# WebSocket / прокторинг
+channels>=4.0,<5
+channels-redis>=4.2,<5
+daphne>=4.0,<5

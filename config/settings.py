@@ -92,6 +92,7 @@ SIMPLE_JWT = {
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -102,6 +103,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
+    'channels',
     'testing.apps.TestingConfig',
 ]
 
@@ -253,4 +255,17 @@ LOGGING = {
             "propagate": False,
         },
     },
+}
+
+# ─── Django Channels / WebSocket ─────────────────────────────────────────────
+
+ASGI_APPLICATION = "config.routing.application"
+
+_redis_url = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379")
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {"hosts": [_redis_url]},
+    }
 }
