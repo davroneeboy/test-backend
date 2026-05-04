@@ -12,6 +12,32 @@
 {% block content %}
 <h1>Прокторинг — активные попытки</h1>
 
+<form method="get" style="margin-bottom:16px; display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
+  <div>
+    <label style="display:block; font-size:0.85em; color:#666; margin-bottom:4px;">Тип региона</label>
+    <select name="region_type" onchange="this.form.submit()" style="padding:5px 8px; border:1px solid #ccc; border-radius:4px;">
+      <option value="">— Все регионы —</option>
+      {% for val, label in region_type_choices %}
+        <option value="{{ val }}" {% if selected_region_type == val %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if show_viloyat_filter %}
+  <div>
+    <label style="display:block; font-size:0.85em; color:#666; margin-bottom:4px;">Вилоят</label>
+    <select name="viloyat" onchange="this.form.submit()" style="padding:5px 8px; border:1px solid #ccc; border-radius:4px;">
+      <option value="">— Все вилояты —</option>
+      {% for val, label in viloyat_choices %}
+        <option value="{{ val }}" {% if selected_viloyat == val %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  {% if selected_region_type or selected_viloyat %}
+  <a href="?" style="font-size:0.85em; color:#417690; padding-bottom:4px;">✕ Сбросить</a>
+  {% endif %}
+</form>
+
 <div id="no-attempts" style="display:none; padding:1em; color:#888;">
   Нет активных попыток.
 </div>
@@ -40,8 +66,18 @@
       width="320" height="240"
       style="width:100%; display:block; background:#111;"
     ></canvas>
-    <div style="padding:6px 12px; font-size:0.8em; color:#666;">
-      <span id="status-{{ attempt.pk }}">Ожидание подключения…</span>
+    <div style="padding:6px 12px; font-size:0.8em; color:#666; line-height: 1.45;">
+      <div><strong>Начат:</strong> {{ attempt.started_at|date:"SHORT_DATETIME_FORMAT" }}</div>
+      <div><strong>Вопрос:</strong> {{ attempt.current_question_display }}</div>
+      <div><strong>Окончание:</strong>
+        {% if attempt.deadline_at %}
+          {{ attempt.deadline_at|date:"SHORT_DATETIME_FORMAT" }}
+          (<span class="deadline-countdown" data-deadline="{{ attempt.deadline_at|date:'c' }}">расчет...</span>)
+        {% else %}
+          без лимита
+        {% endif %}
+      </div>
+      <div style="margin-top:4px;" id="status-{{ attempt.pk }}">Ожидание подключения…</div>
     </div>
   </div>
   {% empty %}
@@ -53,6 +89,7 @@
 (function () {
   const protocol = location.protocol === "https:" ? "wss" : "ws";
   const canvases = document.querySelectorAll("canvas[data-attempt]");
+  const wsConnections = {};
 
   if (canvases.length === 0) {
     document.getElementById("no-attempts").style.display = "block";
@@ -66,6 +103,7 @@
     const statusEl = document.getElementById("status-" + attemptId);
     const wsUrl = protocol + "://" + location.host + "/ws/proctoring/" + attemptId + "/?role=watcher";
     const ws = new WebSocket(wsUrl);
+    wsConnections[attemptId] = ws;
 
     ws.onopen = function () {
       statusEl.textContent = "Подключено, ожидание камеры…";
@@ -74,6 +112,14 @@
 
     ws.onmessage = function (e) {
       const data = JSON.parse(e.data);
+
+      if (data.type === "expired") {
+        statusEl.textContent = "Время истекло";
+        statusEl.style.color = "#f39c12";
+        ws.close(1000);
+        return;
+      }
+
       if (data.type !== "frame" || !data.data) return;
       const img = new Image();
       img.onload = function () { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); };
@@ -98,6 +144,36 @@
       statusEl.style.color = "#e74c3c";
     };
   });
+
+  function updateCountdowns() {
+    const now = new Date();
+    document.querySelectorAll(".deadline-countdown").forEach(function (el) {
+      const deadline = new Date(el.dataset.deadline);
+      if (isNaN(deadline.getTime())) {
+        el.textContent = "—";
+        return;
+      }
+      const diff = Math.max(0, deadline - now);
+      const seconds = Math.floor(diff / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      el.textContent = `${minutes}:${secs.toString().padStart(2, "0")}`;
+
+      if (diff === 0) {
+        const card = el.closest(".proctoring-card");
+        if (card) {
+          const attemptId = card.querySelector("canvas").dataset.attempt;
+          const ws = wsConnections[attemptId];
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.close(1000);
+          }
+        }
+      }
+    });
+  }
+
+  updateCountdowns();
+  setInterval(updateCountdowns, 1000);
 })();
 </script>
 {% endblock %}

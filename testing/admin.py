@@ -13,6 +13,7 @@ from django.forms.models import BaseInlineFormSet
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import path
+from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
@@ -296,16 +297,47 @@ class TestAdmin(AdminActionLoggingMixin, nested_admin.NestedModelAdmin):
         return custom + super().get_urls()
 
     def proctoring_view(self, request):
-        attempts = (
+        from .constants import REGION_TYPE_CHOICES, VILOYAT_CHOICES, REGION_VILOYAT
+        from django.db.models import F
+        now = timezone.now()
+        # Один UPDATE для всех просроченных: статус + finished_at
+        TestAttempt.objects.filter(
+            status=AttemptStatus.IN_PROGRESS, deadline_at__lte=now
+        ).update(status=AttemptStatus.TIMED_OUT, finished_at=F("deadline_at"))
+
+        qs = (
             TestAttempt.objects.filter(status=AttemptStatus.IN_PROGRESS)
-            .select_related("user", "test")
+            .filter(Q(deadline_at__isnull=True) | Q(deadline_at__gt=now))
+            .select_related("user", "test", "user__profile")
+            .annotate(response_count=Count("responses"))
             .order_by("started_at")
         )
+
+        region_type = request.GET.get("region_type", "")
+        viloyat = request.GET.get("viloyat", "")
+        if region_type:
+            qs = qs.filter(user__profile__region_type=region_type)
+        if viloyat:
+            qs = qs.filter(user__profile__viloyat=viloyat)
+
+        attempts = list(qs)
+        for attempt in attempts:
+            total_questions = len(attempt.question_sequence) if attempt.question_sequence else 0
+            attempt.current_question = min(attempt.response_count + 1, total_questions) if total_questions else 0
+            attempt.current_question_display = f"{attempt.current_question}/{total_questions}" if total_questions else "—"
+
+        show_viloyat = (region_type == REGION_VILOYAT) or (not region_type)
         context = {
             **self.admin_site.each_context(request),
             "title": "Прокторинг",
             "attempts": attempts,
             "opts": self.model._meta,
+            "region_type_choices": REGION_TYPE_CHOICES,
+            "viloyat_choices": VILOYAT_CHOICES,
+            "region_viloyat": REGION_VILOYAT,
+            "selected_region_type": region_type,
+            "selected_viloyat": viloyat,
+            "show_viloyat_filter": show_viloyat,
         }
         return render(request, "admin/testing/proctoring.html", context)
 

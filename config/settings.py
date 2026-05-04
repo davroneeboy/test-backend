@@ -259,6 +259,9 @@ LOGGING = {
 
 # ─── Django Channels / WebSocket ─────────────────────────────────────────────
 
+# Отключить терминацию теста при смене вкладки/окна (только для разработки!)
+DISABLE_TERMINATION = os.environ.get("DISABLE_TERMINATION", "False") == "True"
+
 ASGI_APPLICATION = "config.routing.application"
 
 _redis_url = os.environ.get("REDIS_URL", "").strip()

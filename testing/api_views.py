@@ -376,7 +376,9 @@ class AttemptSessionEventCreateView(generics.GenericAPIView):
             AttemptSessionEventType.WINDOW_BLUR: "window_blur",
         }
         was_terminated = False
-        if inst.event_type in _terminate_on:
+        from django.conf import settings as _s
+        termination_enabled = not getattr(_s, "DISABLE_TERMINATION", False)
+        if termination_enabled and inst.event_type in _terminate_on:
             attempt.refresh_from_db()
             if attempt.status == AttemptStatus.IN_PROGRESS:
                 terminate_attempt(attempt, _terminate_on[inst.event_type])
