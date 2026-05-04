@@ -18,7 +18,9 @@
       "Bash(ls .venv*)",
       "Bash(ls env*)",
       "Bash(Scripts/python.exe manage.py check)",
-      "PowerShell(& \"C:\\\\Users\\\\davro\\\\OneDrive\\\\Desktop\\\\test-backend\\\\.venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\davro\\\\OneDrive\\\\Desktop\\\\test-backend\\\\manage.py\" check)"
+      "PowerShell(& \"C:\\\\Users\\\\davro\\\\OneDrive\\\\Desktop\\\\test-backend\\\\.venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\davro\\\\OneDrive\\\\Desktop\\\\test-backend\\\\manage.py\" check)",
+      "Bash(timeout 5 python -u manage.py runserver --noreload)",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }
