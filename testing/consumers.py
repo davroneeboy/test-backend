@@ -23,14 +23,11 @@ def _group_name(attempt_id: int) -> str:
 
 
 def _parse_jwt_user_id(token: str):
-    """Extract user_id from JWT payload without signature verification (trust internal network)."""
+    """Extract user_id from JWT, verifying signature via simplejwt."""
     try:
-        import base64, json
-        payload_b64 = token.split(".")[1]
-        # Add padding
-        payload_b64 += "=" * (4 - len(payload_b64) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-        user_id = payload.get("user_id")
+        from rest_framework_simplejwt.tokens import AccessToken
+        validated = AccessToken(token)
+        user_id = validated.get("user_id")
         if user_id is None:
             return None
         return int(user_id)
@@ -118,17 +115,7 @@ class ProctoringConsumer(AsyncWebsocketConsumer):
         )
 
     async def proctoring_frame(self, event):
-        import json
-        frame = event["frame"]
-        # Если стример шлёт сырой base64 (не JSON), оборачиваем
-        try:
-            parsed = json.loads(frame)
-            if isinstance(parsed, dict) and "type" in parsed:
-                await self.send(text_data=frame)
-                return
-        except (json.JSONDecodeError, TypeError):
-            pass
-        await self.send(text_data=json.dumps({"type": "frame", "data": frame}))
+        await self.send(text_data=json.dumps({"type": "frame", "data": event["frame"]}))
 
     async def proctoring_expired(self, event):
         import json
@@ -178,9 +165,8 @@ class ProctoringConsumer(AsyncWebsocketConsumer):
 
     async def _schedule_expired_notify(self, deadline):
         now = timezone.now()
-        delay = (deadline - now).total_seconds()
-        if delay > 0:
-            await asyncio.sleep(delay)
+        delay = max(0.0, (deadline - now).total_seconds())
+        await asyncio.sleep(delay)
         await sync_expired_attempt_async(self.attempt_id)
         try:
             await self.send(text_data=json.dumps({"type": "expired", "attempt_id": self.attempt_id}))
