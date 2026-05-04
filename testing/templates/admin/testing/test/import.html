@@ -1,0 +1,77 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Импорт теста из Excel{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans "Главная" %}</a>
+  &rsaquo; <a href="../">Тесты</a>
+  &rsaquo; Импорт из Excel
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Импорт теста из Excel</h1>
+
+<div class="help" style="margin-bottom: 1.5em; padding: 1em; background: #f8f8f8; border-left: 4px solid #417690;">
+  <strong>Формат файла (.xlsx):</strong>
+  <p>Первая строка — заголовок (игнорируется). Далее по одной строке на вопрос:</p>
+  <table style="border-collapse: collapse; font-size: 0.9em; width: 100%;">
+    <thead>
+      <tr style="background: #417690; color: white;">
+        <th style="padding: 4px 8px; border: 1px solid #ccc;">Столбец</th>
+        <th style="padding: 4px 8px; border: 1px solid #ccc;">Содержимое</th>
+        <th style="padding: 4px 8px; border: 1px solid #ccc;">Обязательный</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding: 4px 8px; border: 1px solid #ccc;">A</td><td style="padding: 4px 8px; border: 1px solid #ccc;">Группа / отдел (название группы Django, пусто — без группы)</td><td style="padding: 4px 8px; border: 1px solid #ccc;">Нет</td></tr>
+      <tr><td style="padding: 4px 8px; border: 1px solid #ccc;">B</td><td style="padding: 4px 8px; border: 1px solid #ccc;">Текст вопроса</td><td style="padding: 4px 8px; border: 1px solid #ccc;">Да</td></tr>
+      <tr><td style="padding: 4px 8px; border: 1px solid #ccc;">C</td><td style="padding: 4px 8px; border: 1px solid #ccc;">Баллы (целое, по умолчанию 1)</td><td style="padding: 4px 8px; border: 1px solid #ccc;">Нет</td></tr>
+      <tr><td style="padding: 4px 8px; border: 1px solid #ccc;">D–K</td><td style="padding: 4px 8px; border: 1px solid #ccc;">Варианты ответа (до 8 штук, минимум 2)</td><td style="padding: 4px 8px; border: 1px solid #ccc;">Да (мин. 2)</td></tr>
+      <tr><td style="padding: 4px 8px; border: 1px solid #ccc;">L</td><td style="padding: 4px 8px; border: 1px solid #ccc;">Правильный ответ: номер(а) через запятую, например <code>1</code> или <code>1,3</code></td><td style="padding: 4px 8px; border: 1px solid #ccc;">Да</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top: 0.75em;">
+    <strong>Группы по отделам:</strong> если в столбце A указано название отдела
+    (совпадающее с Django-группой), вопрос будет привязан к группе вопросов этого отдела.
+    Вопросы с одинаковым названием группы объединяются в одну группу.
+  </p>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+    <div class="{% if message.tags %}{{ message.tags }}{% endif %}" style="padding: 0.75em 1em; margin-bottom: 1em; border-radius: 3px;">
+      {{ message }}
+    </div>
+  {% endfor %}
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" novalidate>
+  {% csrf_token %}
+  <fieldset class="module aligned">
+    {% for field in form %}
+      <div class="form-row{% if field.errors %} errors{% endif %}">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.errors %}
+          <ul class="errorlist">
+            {% for error in field.errors %}
+              <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+        {% if field.help_text %}
+          <p class="help">{{ field.help_text }}</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </fieldset>
+
+  <div class="submit-row">
+    <input type="submit" value="Импортировать" class="default">
+    <a href="../" class="button cancel-link">Отмена</a>
+  </div>
+</form>
+{% endblock %}

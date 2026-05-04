@@ -4,13 +4,15 @@ from openpyxl.utils import get_column_letter
 
 import nested_admin
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.db.models import Count, Q
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.forms.models import BaseInlineFormSet
 from django.http import HttpResponse
+from django.shortcuts import redirect, render
+from django.urls import path
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
@@ -232,8 +234,24 @@ class QuestionGroupNestedInline(nested_admin.NestedStackedInline):
     inlines = (QuestionNestedInline,)
 
 
+class _TestImportForm(forms.Form):
+    title = forms.CharField(label="Название теста", max_length=255)
+    description = forms.CharField(
+        label="Описание", required=False, widget=forms.Textarea(attrs={"rows": 3})
+    )
+    time_limit_seconds = forms.IntegerField(
+        label="Лимит времени (сек)", required=False, min_value=1
+    )
+    questions_to_show = forms.IntegerField(
+        label="Показывать вопросов", required=False, min_value=1
+    )
+    excel_file = forms.FileField(label="Excel-файл (.xlsx)")
+
+
 @admin.register(Test)
 class TestAdmin(AdminActionLoggingMixin, nested_admin.NestedModelAdmin):
+    change_list_template = "admin/testing/test/change_list.html"
+
     list_display = (
         "title",
         "is_active",
@@ -260,6 +278,51 @@ class TestAdmin(AdminActionLoggingMixin, nested_admin.NestedModelAdmin):
         (_("Parametrlar"), {"fields": ("time_limit_seconds", "questions_to_show", "allowed_groups")}),
         (_("Texnik ma'lumotlar"), {"fields": ("created_at", "updated_at")}),
     )
+
+    def get_urls(self):
+        custom = [
+            path(
+                "import/",
+                self.admin_site.admin_view(self.import_view),
+                name="testing_test_import",
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def import_view(self, request):
+        from .excel_import import ParseError, import_test, parse_excel
+        from .models import AdminActionType
+
+        if request.method == "POST":
+            form = _TestImportForm(request.POST, request.FILES)
+            if form.is_valid():
+                try:
+                    rows = parse_excel(request.FILES["excel_file"])
+                    test = import_test(
+                        title=form.cleaned_data["title"],
+                        description=form.cleaned_data.get("description") or "",
+                        time_limit_seconds=form.cleaned_data.get("time_limit_seconds"),
+                        questions_to_show=form.cleaned_data.get("questions_to_show"),
+                        rows=rows,
+                    )
+                    self._write_admin_log(request, test, AdminActionType.CREATE)
+                    messages.success(
+                        request,
+                        f"Тест «{test.title}» импортирован: {len(rows)} вопросов.",
+                    )
+                    return redirect(f"../{test.pk}/change/")
+                except ParseError as exc:
+                    messages.error(request, str(exc))
+        else:
+            form = _TestImportForm()
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Импорт теста из Excel",
+            "form": form,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/testing/test/import.html", context)
 
     @admin.display(description=_("O'tkazish davri"))
     def conduct_schedule_display(self, obj: Test):
