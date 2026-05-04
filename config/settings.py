@@ -93,7 +93,7 @@ SIMPLE_JWT = {
 
 INSTALLED_APPS = [
     'daphne',
-    'django.contrib.admin',
+    'config.apps.CustomAdminConfig',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -261,11 +261,19 @@ LOGGING = {
 
 ASGI_APPLICATION = "config.routing.application"
 
-_redis_url = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379")
+_redis_url = os.environ.get("REDIS_URL", "").strip()
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {"hosts": [_redis_url]},
+if _redis_url:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [_redis_url]},
+        }
     }
-}
+else:
+    # Локальная разработка без Redis
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
